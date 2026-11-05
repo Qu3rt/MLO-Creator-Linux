@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=MLO Creator
+GenericName=GTA V MLO editor
+Comment=Build FiveM interiors (MLOs) inside a GTA V building
+Exec=mlo-creator %f
+TryExec=mlo-creator
+Icon=mlo-creator
+Terminal=false
+Categories=Graphics;Development;3DGraphics;
+Keywords=GTA;FiveM;MLO;interior;mod;map;
+StartupNotify=true
+StartupWMClass=MloCreator
+MimeType=application/x-mlo-creator;

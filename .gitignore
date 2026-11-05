@@ -2,6 +2,7 @@
 projects/
 output/
 Exports/
+exports/
 cache/
 logs/
 settings.json
@@ -14,3 +15,24 @@ desktop.ini
 
 # source code folder (always track)
 !source/
+# Linux port: build output, the local SDK used in this checkout, test scratch
+linux/src/bin/
+linux/src/obj/
+linux/dist/
+linux/tests/*.log
+linux/tests/*.png
+.toolchain/
+.dotnet-home/
+.nuget/
+.nuget-http/
+
+# Linux port: build output, the local SDK used in this checkout, test scratch
+linux/src/bin/
+linux/src/obj/
+linux/dist/
+linux/tests/*.log
+linux/tests/*.png
+.toolchain/
+.dotnet-home/
+.nuget/
+.nuget-http/

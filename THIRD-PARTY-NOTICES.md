@@ -12,6 +12,24 @@ MLO Creator's own code is under the MIT licence (`LICENSE`). It uses the compone
 
 The other DLLs that CodeWalker's build contains (`WeifenLuo.WinFormsUI.Docking`, `FastColoredTextBox`, `CodeWalker.WinForms`, further `SharpDX.*` assemblies) are copied by `build.ps1` only because CodeWalker's library loads them; check each one's licence in its own project if you redistribute them.
 
+## Linux port
+
+The Linux port (`linux/`) uses the same CodeWalker library and the same three models, plus the
+components below. GTK and WebKitGTK are system libraries: they are linked at run time and are not part of
+the source tree. The self-contained Linux package also includes the .NET runtime.
+
+| Component | Used for | Licence / where to check |
+|---|---|---|
+| [CodeWalker.Core](https://www.nuget.org/packages/CodeWalker.Core) 1.0.3 (NuGet) | The same CodeWalker library as the Windows build, built for `netstandard2.0`; reading/writing GTA V files and the game archives | Copyright (c) dexyfex, same terms as CodeWalker above |
+| [SharpDX](https://github.com/sharpdx/SharpDX) 4.2.0 (NuGet) | Mathematics used by CodeWalker.Core | MIT |
+| [StbImageSharp](https://github.com/StbSharp/StbImageSharp) | Decoding the PNG/JPEG pictures inside `.glb` files on Linux (`System.Drawing` is not usable there) | Public domain (stb_image) |
+| [GTK 3](https://www.gtk.org/) | The native window and the native file dialogs | LGPL-2.1 |
+| [WebKitGTK](https://webkitgtk.org/) 4.1 | Showing the editor page and its WebGL view | LGPL-2.1 / BSD-style |
+| [.NET 9](https://dotnet.microsoft.com/) | The host runtime; included in the self-contained package only | MIT |
+
+The Linux port's own code (the C# host and the `native/mlo-shell.c` window) is under the same MIT licence
+as the rest of MLO Creator.
+
 ## Models in `models\`
 
 These are other people's work, used under their licences. The full credits are in `models/CREDITS.txt`.

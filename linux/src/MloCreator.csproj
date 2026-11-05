@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <AssemblyName>MloCreator</AssemblyName>
+    <RootNamespace>MloCreator</RootNamespace>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <DebugType>portable</DebugType>
+    <NoWarn>CS0168;CS0219;CS0414;CS0649;CS1998;CS0162</NoWarn>
+    <AppendTargetFrameworkToOutputPath>true</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CodeWalker.Core" Version="1.0.3" />
+    <PackageReference Include="StbImageSharp" Version="2.30.15" />
+  </ItemGroup>
+
+  <!-- the editor is shared with the Windows build: it is copied into the output, not duplicated in this tree -->
+  <ItemGroup>
+    <Content Include="$(MSBuildThisFileDirectory)../../source/ui/**/*" Link="ui/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="$(MSBuildThisFileDirectory)../../source/models/**/*" Link="models/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)../native/mlo-shell.c" />
+    <None Include="$(MSBuildThisFileDirectory)../native/build-shell.sh" />
+  </ItemGroup>
+
+  <!-- the native window: GTK3 + WebKit2GTK, one small C program -->
+  <Target Name="BuildNativeShell" AfterTargets="Build">
+    <Exec Command="bash &quot;$(MSBuildThisFileDirectory)../native/build-shell.sh&quot; &quot;$(OutDir).&quot;" />
+  </Target>
+  <Target Name="BuildNativeShellPublish" AfterTargets="Publish">
+    <Exec Command="bash &quot;$(MSBuildThisFileDirectory)../native/build-shell.sh&quot; &quot;$(PublishDir).&quot;" />
+  </Target>
+
+</Project>

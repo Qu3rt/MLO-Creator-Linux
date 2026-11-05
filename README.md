@@ -1,6 +1,8 @@
 # MLO Creator
 
-A Windows program for building FiveM interiors (MLOs) inside an existing GTA V building model, then exporting a ready-to-upload resource folder.
+A program for building FiveM interiors (MLOs) inside an existing GTA V building model, then exporting a ready-to-upload resource folder.
+
+> **Linux:** there is a complete native Linux port in [`linux/`](linux/README.md): GTK 3 + WebKit2GTK, runs on both **X11 and Wayland**, no Wine and no WebView2. The rest of this file describes the original Windows build; the [Linux README](linux/README.md) covers the differences, the build, the self-contained package and the troubleshooting.
 
 You import the model files of a building (for example a vanilla house), cut doors and windows through its walls, build the rooms inside, place lights and doors, paint, and press Export. Nothing is generated for you: every wall, opening, light and cut comes from something you did. It runs on your PC, outside the game.
 
@@ -38,6 +40,25 @@ MLO Creator also uses CodeWalker's library itself (it is built against it, see [
 Unzip the release anywhere you can write to and double-click `MloCreator.exe`. Projects, cache, settings and exports are kept next to the program (`projects\`, `cache\`, `output\`, `settings.json`). The exe is not signed, so Windows may ask once ("More info", then "Run anyway").
 
 Command line options: `--browser` (use an Edge or Chrome app window), `--devtools` (allow F12), `--no-window` (server only, for testing), `--port N`.
+
+## Linux
+
+The native Linux port is in [`linux/`](linux/README.md). It uses the same editor and the same CodeWalker
+library, with a GTK 3 / WebKit2GTK window instead of WebView2, and builds with the .NET 9 SDK:
+
+```bash
+cd linux
+./build.sh          # host + native window
+./run.sh            # start it (X11 or Wayland)
+./package.sh        # dist/MloCreator + zip, self-contained (no .NET needed)
+./install.sh        # application-menu entry in ~/.local
+```
+
+Projects, cache, exports and `settings.json` stay next to the program when that folder is writable,
+otherwise in `~/.local/share/MloCreator`; `--root DIR` chooses. The port detects GTA V in Steam
+(native and Flatpak) itself, still understands `GTA5_PATH` and the `gtaPath` setting, and converts the
+Wine paths the old build wrote. See the [Linux README](linux/README.md) for the dependencies, the exact
+differences, what was verified and the WebKit/GPU troubleshooting.
 
 ## Build it yourself
 
