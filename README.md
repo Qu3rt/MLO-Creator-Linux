@@ -1,4 +1,4 @@
-# MLO Creator
+# MLO Creator (also ported for Linux)
 
 A program for building FiveM interiors (MLOs) inside an existing GTA V building model, then exporting a ready-to-upload resource folder.
 
