@@ -152,6 +152,21 @@ namespace MloCreator
             auto = false; int[] r = (setup != null && setup.Length == 9) ? setup : null;
             if (r == null && (kind == "door" || kind == "frame")) { r = GlbModel.AutoUpright(gm); auto = r != null; }
             GlbModel om = r == null ? gm : OrientedModel(gm, r);
+            // A quarter-turn in model setup can put the broad door face along depth.
+            // The placement system then separates double leaves along their thickness,
+            // making them sit one behind the other. Keep a tall door's thin horizontal
+            // axis as depth; placement yaw still controls which wall it faces.
+            if (kind == "door" && om.D > om.W * 1.5 && om.H > om.D)
+            {
+                int[] fix = GlbModel.AutoUpright(om), cur = r ?? GlbModel.Ident;
+                if (fix != null)
+                {
+                    int[] combined = new int[9];
+                    for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++)
+                        for (int k = 0; k < 3; k++) combined[i * 3 + j] += fix[i * 3 + k] * cur[k * 3 + j];
+                    r = combined; auto = true; om = OrientedModel(gm, r);
+                }
+            }
             if (setup == null && kind == "frame" && om.UpsideDown)
             {
                 // turned 180 degrees about its width: up becomes down and front becomes back
@@ -387,7 +402,7 @@ namespace MloCreator
                 if (m.Geoms.Count > 0) { m.MeasureCore(); m.MeasureInner(); f.Models.Add(m); }
             }
             if (f.Models.Count == 0) throw new Exception(fileName + " has no triangles.");
-            bool one = f.Models.Count == 1; string nameText = f.Stem + " " + f.Title; f.Kind = one && Regex.IsMatch(nameText, "frame|casing|jamb", RegexOptions.IgnoreCase) ? "frame" : (one && Regex.IsMatch(nameText, "door", RegexOptions.IgnoreCase) ? "door" : "window");
+            bool one = f.Models.Count == 1; string nameText = f.Stem + " " + f.Title; f.Kind = one && Regex.IsMatch(nameText, "garage", RegexOptions.IgnoreCase) ? "garage" : one && Regex.IsMatch(nameText, "frame|casing|jamb", RegexOptions.IgnoreCase) ? "frame" : (one && Regex.IsMatch(nameText, "door", RegexOptions.IgnoreCase) ? "door" : "window");
             return f;
         }
 

@@ -12,8 +12,8 @@ namespace MloCreator
 {
     public static partial class Exporter
     {
-        class FitItem { public string File, Model, Kind, Hinge, Id; public double Cx, Cy, Zb, Yaw, W, D, H; public int[] Rot; public bool Mirror; }          // (Mirror: the model turned inside out left to right: the second leaf of a double door)
-        class FitDoor { public GroupData G; public DoorData D; public string Name; public V3 Mn, Mx; public double W, D2, H, CenterU, CoreOff, Yaw; public int Mat = 70; public string Hinge; }
+        class FitItem { public string File, Model, Kind, Hinge, Id; public double Cx, Cy, Zb, Yaw, W, D, H, Clearance; public int[] Rot; public bool Mirror; }          // (Mirror: the model turned inside out left to right: the second leaf of a double door)
+        class FitDoor { public GroupData G; public DoorData D; public string Name; public V3 Mn, Mx; public double W, D2, H, CenterU, CoreOff, Yaw; public int Mat = 70; public string Hinge; public bool Garage; public double Clearance, GarageYaw; }
         class FitResult { public List<FitDoor> Doors = new List<FitDoor>(); public List<string> Credits = new List<string>(); public int Windows; }
 
         static string FitProject(string p) { return Regex.Replace(p ?? "", @"[^A-Za-z0-9 _\-]", "").Trim(); }
@@ -25,7 +25,8 @@ namespace MloCreator
             double sw = it.W / Math.Max(gm.W, 1e-6), sd = it.D / Math.Max(gm.D, 1e-6), sh = it.H / Math.Max(gm.H, 1e-6);
             double uc = (gm.Min[0] + gm.Max[0]) / 2, nc = (gm.Min[1] + gm.Max[1]) / 2, z0 = gm.Min[2], cs = Math.Cos(it.Yaw), sn = Math.Sin(it.Yaw);
             // the hinge of a door is on the left or the right as seen from the front (the front looks towards +n, so the viewer's left is +u)
-            double hingeU = door ? (it.Hinge == "r" ? -it.W / 2 : it.W / 2) : 0;
+            double hingeU = door && it.Kind != "garage" ? (it.Hinge == "r" ? -it.W / 2 : it.W / 2) : 0;
+            if (it.Kind == "garage") { cs = 1; sn = 0; } // script rotates the panel about its local width axis
             double ox = door ? 0 : it.Cx, oy = door ? 0 : it.Cy, oz = door ? 0 : it.Zb;
             List<BakedGeom> outp = new List<BakedGeom>();
             foreach (GlbGeom g in gm.Geoms)
@@ -71,6 +72,7 @@ namespace MloCreator
             {
                 Dictionary<string, object> d = J.O(o); FitItem it = new FitItem(); it.File = J.S(J.G(d, "f"), ""); it.Model = J.S(J.G(d, "m"), ""); it.Kind = J.S(J.G(d, "kind"), "window"); it.Hinge = J.S(J.G(d, "hinge"), "l"); it.Id = J.S(J.G(d, "id"), "");
                 it.Cx = J.D(J.G(d, "cx"), 0); it.Cy = J.D(J.G(d, "cy"), 0); it.Zb = J.D(J.G(d, "zb"), 0); it.Yaw = J.D(J.G(d, "yaw"), 0); it.W = J.D(J.G(d, "w"), 1); it.D = J.D(J.G(d, "d"), 0.1); it.H = J.D(J.G(d, "h"), 1);
+                it.Clearance = J.D(J.G(d, "clearance"), 0.15);
                 it.Mirror = J.B(J.G(d, "mirror"), false);
                 List<object> rl = J.A(J.G(d, "rot")); if (rl.Count == 9) { it.Rot = new int[9]; for (int ri = 0; ri < 9; ri++) it.Rot[ri] = J.I(rl[ri], 0); }
                 if (it.File.Length > 0) items.Add(it);
@@ -86,7 +88,7 @@ namespace MloCreator
                 grp = null;
             };
             Dictionary<MatData, List<int>> idxLists = new Dictionary<MatData, List<int>>();
-            int doorN = 0;
+            int doorN = 0, garageN = 0;
             foreach (FitItem it in items)
             {
                 GlbFile gf; if (!files.TryGetValue(it.File, out gf))
@@ -101,13 +103,13 @@ namespace MloCreator
                 GlbModel gm = gf.Models.Find(delegate (GlbModel q) { return q.Id == it.Model; });
                 if (gm == null) { warns.Add("The model " + it.Model + " is not in " + it.File + " any more, so a placed " + it.Kind + " was left out."); continue; }
                 if (it.Rot != null && !GlbModel.IsIdent(it.Rot)) gm = gf.OrientedModel(gm, it.Rot);          // the model as it was set up in the editor (stood up, turned round)
-                bool door = it.Kind == "door";
+                bool garage = it.Kind == "garage", door = it.Kind == "door" || garage;
                 List<BakedGeom> baked = FitBakeGeoms(gm, it, door);
                 foreach (BakedGeom b in baked) { GlbMat mt = gf.Mats[Math.Min(b.Mat, gf.Mats.Count - 1)]; FitTexture(gf, mt, texs, have); if (mt.Glass) needGlass = true; }
                 if (door)
                 {
                     // a door is a prop of its own: positions relative to the hinge, which is also where the entity stands
-                    doorN++; FitDoor fd = new FitDoor(); fd.Name = "fd" + doorN; GroupData g = new GroupData(); g.Name = fd.Name; g.Room = 1; g.Flags = 1572864; g.Lod = 100;
+                    FitDoor fd = new FitDoor(); fd.Garage = garage; fd.Clearance = it.Clearance; fd.GarageYaw = it.Yaw; fd.Name = garage ? "gd" + (++garageN) : "fd" + (++doorN); GroupData g = new GroupData(); g.Name = fd.Name; g.Room = 1; g.Flags = 1572864; g.Lod = 100;
                     Dictionary<string, MatData> dm = new Dictionary<string, MatData>();
                     foreach (BakedGeom b in baked)
                     {
@@ -118,13 +120,13 @@ namespace MloCreator
                         float[] nu = new float[md.Uv.Length + b.Uv.Length]; Buffer.BlockCopy(md.Uv, 0, nu, 0, md.Uv.Length * 4); Buffer.BlockCopy(b.Uv, 0, nu, md.Uv.Length * 4, b.Uv.Length * 4); md.Uv = nu;
                         int[] ni = new int[md.Idx.Length + b.Idx.Length]; Buffer.BlockCopy(md.Idx, 0, ni, 0, md.Idx.Length * 4); for (int i = 0; i < b.Idx.Length; i++) ni[md.Idx.Length + i] = b.Idx[i] + baseV; md.Idx = ni;
                     }
-                    double hu = it.Hinge == "r" ? -it.W / 2 : it.W / 2, cs = Math.Cos(it.Yaw), sn = Math.Sin(it.Yaw);
+                    double hu = garage ? 0 : (it.Hinge == "r" ? -it.W / 2 : it.W / 2), cs = Math.Cos(it.Yaw), sn = Math.Sin(it.Yaw);
                     fd.D = new DoorData(); fd.D.Name = P + fd.Name; fd.D.X = it.Cx + hu * cs; fd.D.Y = it.Cy + hu * sn; fd.D.Z = it.Zb + it.H / 2; fd.D.Heading = 0; fd.G = g;
                     Bounds(g, out fd.Mn, out fd.Mx);
                     // collision: one box the size of the leaf (see FitDoorBoundsXml); its middle is half a leaf away from the hinge
                     // (the leaf, not the knob: the thickness of the body of the model, and how far its middle is from the middle of the depth)
                     double sdv = it.D / Math.Max(gm.D, 1e-6); fd.D2 = Math.Max(0.04, (gm.CoreN1 - gm.CoreN0) * sdv + 0.01); fd.CoreOff = ((gm.CoreN0 + gm.CoreN1) / 2 - (gm.Min[1] + gm.Max[1]) / 2) * sdv;
-                    fd.W = it.W; fd.H = it.H; fd.Yaw = it.Yaw; fd.CenterU = it.Hinge == "r" ? it.W / 2 : -it.W / 2; fd.Hinge = it.Hinge;
+                    fd.W = it.W; fd.H = it.H; fd.Yaw = garage ? 0 : it.Yaw; fd.CenterU = garage ? 0 : (it.Hinge == "r" ? it.W / 2 : -it.W / 2); if (garage) { fd.Mat = 1; fd.D2 = it.D; fd.CoreOff = 0; } fd.Hinge = it.Hinge;
                     res.Doors.Add(fd);
                     continue;
                 }

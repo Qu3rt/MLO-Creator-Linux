@@ -5,6 +5,7 @@ Exports/
 exports/
 cache/
 logs/
+other-sources
 settings.json
 
 # editor / OS
@@ -21,6 +22,7 @@ linux/src/obj/
 linux/dist/
 linux/tests/*.log
 linux/tests/*.png
+linux/ui/tex/*
 .toolchain/
 .dotnet-home/
 .nuget/
@@ -36,3 +38,8 @@ linux/tests/*.png
 .dotnet-home/
 .nuget/
 .nuget-http/
+
+# Linux port: local test scratch and screenshots taken during development
+linux/test-output/
+linux/tmp-window*/
+linux/*.log

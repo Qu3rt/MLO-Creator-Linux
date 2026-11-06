@@ -27,6 +27,15 @@ export NUGET_PACKAGES="${NUGET_PACKAGES:-$ROOT/.nuget}"
 export NUGET_HTTP_CACHE_PATH="${NUGET_HTTP_CACHE_PATH:-$ROOT/.nuget-http}"
 mkdir -p "$DOTNET_CLI_HOME" "$NUGET_PACKAGES" "$NUGET_HTTP_CACHE_PATH"
 
+# Never wipe a folder that holds the user's projects or exports.
+if [ -d "$DIST/projects" ] && find "$DIST/projects" -maxdepth 1 -name '*.mlo.json' -print -quit | grep -q .; then
+    echo "refusing to replace $DIST: it contains projects. Move them out of the package folder first." >&2
+    exit 1
+fi
+if [ -d "$DIST/output" ] && [ -n "$(find "$DIST/output" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+    echo "refusing to replace $DIST: it contains exports. Move them out of the package folder first." >&2
+    exit 1
+fi
 rm -rf "$DIST" "$ZIP"
 mkdir -p "$DIST"
 echo "publishing $RID (self-contained)..."
@@ -39,14 +48,17 @@ if [ ! -x "$DIST/mlo-shell" ]; then
     echo "mlo-shell was not built into $DIST; building it now" >&2
     bash "$HERE/native/build-shell.sh" "$DIST"
 fi
-if [ ! -f "$DIST/ui/index.html" ] || [ ! -f "$DIST/models/door_frame.glb" ]; then
-    echo "the editor files or the bundled models are missing from $DIST" >&2
+if [ ! -f "$DIST/ui/index.html" ] || [ ! -f "$DIST/models/door_frame.glb" ] || \
+   [ ! -f "$DIST/ui/runtime/garage-client.lua" ] || [ ! -f "$DIST/models/garage_up_and_over.glb" ] || \
+   [ ! -f "$DIST/ui/tex/smdz_floor_001_oak_wide_natural.png" ]; then
+    echo "the editor files, the texture library or the bundled models are missing from $DIST" >&2
     exit 1
 fi
 
 # documentation and licences
 mkdir -p "$DIST/docs" "$DIST/projects" "$DIST/output"
-cp "$ROOT/source/docs/HOW-IT-WORKS.md" "$DIST/docs/"
+cp "$HERE/docs/HOW-IT-WORKS.md" "$DIST/docs/"
+cp "$HERE/docs/MODIFIED-BUILD.md" "$DIST/docs/"
 mkdir -p "$DIST/docs/screenshots"
 cp -f "$HERE/docs/screenshots/"*.png "$DIST/docs/screenshots/"
 cp "$ROOT/README.md" "$DIST/README-Windows.md"

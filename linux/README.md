@@ -1,66 +1,72 @@
 # MLO Creator — Linux
 
 A complete native Linux port of MLO Creator, the program in the source tree's [`source/`](../source) folder
-that builds FiveM interiors (MLOs) inside an existing GTA V building. The editor is the same HTML/WebGL
-page; the host is the same C# program, ported to modern .NET, and the Windows-only parts (WebView2,
-WinForms, `System.Drawing`, the registry, `System.Web.Script.Serialization`, CodeWalker's Windows path
-handling) are replaced by native Linux equivalents. It runs under **both X11 and Wayland**.
+that builds FiveM interiors (MLOs) inside an existing GTA V building. This build also ports the feature
+set of the modified/rebuilt editor supplied in `other-sources/MLO-Creator-main1`: multiple storeys,
+half/quarter walls, face painting, the 1,200-image wall/floor library, the full window/door/frame/garage
+library, furniture and signs, the new exporter rules and the Crimtopia UI theme.
 
-> The links to `../source/...` in this file point at the original Windows source tree. In the packaged
-> folder the same information is in `README-Windows.md` and `docs/HOW-IT-WORKS.md`.
-
-It is not a Wine wrapper: there is no `MloCreator.exe`, no WebView2 runtime and no Windows API.
+It is a native application, not Wine: a GTK 3 / WebKit2GTK window (no WebView2), a .NET 9 host running
+CodeWalker.Core on Linux, and the editor files in [`ui/`](ui). It runs on **both X11 and Wayland**.
 
 ![X11](docs/screenshots/x11.png)
 
-*The real project (`projects/My Interior.mlo.json`) opened under X11: the imported Paleto house, the
-checklist, the tools and the 3D view.*
-
-![Native file dialog](docs/screenshots/file-dialog.png)
-
-*The native GTK file chooser (or the desktop portal's own dialog) used to import model files; the same
-dialog is used for folders.*
+*The rebuilt editor under X11: the imported Paleto house, the new Floors and stairs panel, the Crimtopia
+theme and the same editor toolbar.*
 
 ![Wayland](docs/screenshots/wayland.png)
 
-*The same view under Wayland (KDE). The window is a normal GTK window, not a browser.*
+*The same page under Wayland (the screenshots are page snapshots, so they show exactly what the editor
+draws).*
+
+![Native file dialog](docs/screenshots/file-dialog.png)
+
+*The native GTK file chooser used to import model files.*
 
 ## What works
 
-Everything in [`../source/docs/HOW-IT-WORKS.md`](../source/docs/HOW-IT-WORKS.md) that does not need the
-game running. Verified on Linux with the local GTA V install:
+Everything the modified build documents in [`docs/MODIFIED-BUILD.md`](docs/MODIFIED-BUILD.md) and
+[`docs/HOW-IT-WORKS.md`](docs/HOW-IT-WORKS.md), now on Linux:
 
-- **Import** `.ydr`, `.ytd`, `.ybn` and `.ymap` files, through the native GTK file dialog, a path, or
-  drag & drop; the models, textures, collision and entities are read with CodeWalker.Core.
-- **Cutting** the model (XML round-trip through CodeWalker) and the collision, deleting faces/parts,
-  filling holes, clearing the model and the collision out of the rooms.
-- **Export** a complete resource: `fxmanifest.lua`, `client/ipl.lua`, `README.md`, `<prefix>_int.ydr`,
-  `_glass.ydr`, `_mlo.ybn`, `_tex.ytd`, `_types.ytyp`, `_milo_.ymap`, `_manifest_<prefix>.ymf`, the cut
-  building `.ydr`/`.ybn` files, window and door parts from `.glb` models, and the door props with their
-  collision and door flags. Every file re-opens with CodeWalker.
-- **Window and door models** from `.glb` files (the three bundled ones and your own), including their
-  textures, the frame opening, double doors and the door physics/collision.
-- **Game lookups** from your own GTA V install: the building's entity, collision files, detail model
-  placements, props and plants, and the "grab a vanilla house" workflow with its debug picture.
-- **Projects** (open, save, save as, rename, duplicate, delete, thumbnails), the checklist, the walk
-  check, the whole editor UI, WebGL 2.0.
-
-The port was tested with a real project (the Paleto house with 1.2 MB model, 40+ collision files,
-3 openings and 6 deleted faces): the export completed and the generated files were loaded again with
-CodeWalker (MLO with 2 rooms and 3 portals, 2 textures, the cut model and the cut collision).
-
-Still to be seen in the game: streaming, lighting, portals, collision and door behaviour. That is true
-of the Windows version as well; the program cannot test the game for you.
+- **Multi-storey buildings:** adjustable spacing between floors, add/remove floors above with optional
+  room-outline copying, floor Z in the model frame, show-all-floors preview, stairs with landings,
+  step meshes and collision, floor/ceiling openings for stairwells, and links to the imported model's
+  collision and wall faces on upper floors. All floors of a building are exported into its one interior.
+- **Flexible walls:** full, half and quarter-height walls in **Wall** (whole new building) and
+  **Partition** (imported buildings), with capped tops, matching collision and opening clipping.
+- **Face texturing:** paint one whole flat wall side in a click; it stops at corners, room dividers and
+  height changes, and shared walls keep independent paper on their two sides.
+- **Faster painting:** drag-area painting, whole-floor and whole-ceiling fills, 600 added wall images,
+  600 added floor images, colour/tile/finishing controls, and texture seam/colour finishing.
+- **Doors and windows:** the full `.glb` library in both builders, tighter openings with 6 mm reveals,
+  frames around doors, doors in frames, double doors, left/right hinges, reverse facing, clean opening
+  cuts that clear the backing model and collision, and up-and-over **garage doors** with a generated
+  OneSync client/server controller.
+- **Adjustable archways:** width, height and sideways position.
+- **Faster editing:** drag-and-snap, multi-select, stale-preview guards, immediate face-deletion
+  feedback, and cleaner cuts across materials.
+- **Furnishing:** 36 static furniture/decor items (sofas, tables, bar tables, counters, beds, shelves,
+  plants, signs, ...), two-part finishes, rotated per-part collision, multi-select group transforms,
+  snapping to floor/furniture tops/walls, and **editable text signs** with seven font styles and
+  preview/export pixel equality.
+- **Easier setup:** archetype override for model lookup, alternative door anchors and vector4 placement.
+- **Exporter fixes:** portal fragments joined into openings, a 96-exterior-portal guard before touching
+  an existing export, exterior room-0 meshes placed as world YMAP entities, corrected vertex lighting,
+  the manifest registering each interior once, output-folder handling and persistent validation messages.
+- **Polish:** grass removal support, the Crimtopia charcoal/crimson/amber theme, undo/redo and save/load
+  for the new tools.
 
 ## Requirements
 
 - 64-bit Linux with a desktop (X11 or Wayland).
-- **GTK 3** and **WebKit2GTK 4.1** (the window and the editor view).
-- **.NET 9** to build and to run the framework-dependent build. The packaged self-contained build
-  includes the runtime and needs no .NET installation.
-- A copy of **GTA V (Legacy edition)**, and CodeWalker to extract the game files you want to edit, as
-  described in the [Windows README](../source/README.md). The lookups read your install directly; the
-  files you edit are the ones you import.
+- **GTK 3** and **WebKit2GTK 4.1**.
+- **.NET 9** to build and run the framework-dependent build. The packaged self-contained build includes
+  the runtime.
+- A copy of **GTA V (Legacy edition)** and CodeWalker to extract the game files, as described in the
+  [original README](../source/README.md).
+- About 400 MB for the editor's 1,200-image wall/floor library; the unpacked self-contained package is
+  about 0.5 GB. Keep the `ui`, `models` and executable folders together: the texture library, the
+  garage panel and the `ui/runtime` Lua templates are part of the program.
 
 Install the build dependencies:
 
@@ -80,14 +86,17 @@ The runtime libraries alone are enough for the packaged build: `gtk3` and `webki
 
 ## Build and run
 
+**Before building** make sure you copy the textures from another build of the app (under ui/tex) or get them from this [Google Drive](https://drive.google.com/file/d/1_QEEl36xFRFxTR7nMO3wDrNnISQmINIz/view?usp=sharing) and put them in linux/ui/tex
+
 ```bash
 cd linux
-./build.sh          # .NET host + the native window (native/mlo-shell.c)
-./run.sh            # start it
+./build.sh          # .NET host + native window; copies the editor and its textures
+./run.sh            # start it (X11 or Wayland)
 ```
 
 `run.sh` builds first when the output is missing, then starts the program. It takes the same arguments
-as the Windows program (`--port`, `--browser`, `--devtools`, `--no-window`, `--start`, `--grab`, ...).
+as the Windows program (`--port`, `--browser`, `--devtools`, `--no-window`, `--start`, `--grab`,
+`--root`, ...).
 
 Make a self-contained folder and zip that runs without .NET:
 
@@ -96,69 +105,75 @@ Make a self-contained folder and zip that runs without .NET:
 ./install.sh        # install into ~/.local (application menu entry, ~/.local/bin/mlo-creator)
 ```
 
-`install.sh` copies the program to `~/.local/share/mlo-creator`, creates
-`~/.local/bin/mlo-creator`, adds `mlo-creator.desktop` and the icon, and runs
-`update-desktop-database`. It needs no root.
+`install.sh` copies the program to `~/.local/share/mlo-creator` (including the full `ui` texture library),
+creates `~/.local/bin/mlo-creator`, adds `mlo-creator.desktop` and the icon. It needs no root.
 
 ### Where the program keeps its files
 
-As on Windows, projects, cache, exports and `settings.json` live next to the program when that folder is
-writable (the portable behaviour, and what the existing `projects/` and `output/` here use). When the
-program is installed in a read-only place (`/opt`, a package), it falls back to
-`$XDG_DATA_HOME/MloCreator` (`~/.local/share/MloCreator`). Use `--root DIR` to choose explicitly.
+As before, projects, cache, exports and `settings.json` live next to the program when that folder is
+writable; when the program is installed in a read-only place it uses `$XDG_DATA_HOME/MloCreator`
+(`~/.local/share/MloCreator`). Use `--root DIR` to choose explicitly.
 
-`settings.json` and the `GTA5_PATH` environment variable still set `gtaPath` and `outDir`. The port also
-understands the Wine paths the old build wrote (`Z:\home\leo\...`), converts them to `/home/leo/...` on
-load, and detects the game in the usual Linux Steam libraries by itself (native Steam, Flatpak Steam,
-`libraryfolders.vdf`, plus `~/Games`/`~/Desktop`). The **Legacy edition** folder is the one to point at
-(the one with `GTA5.exe`).
+`settings.json`, `GTA5_PATH`, the Steam/GTA detection and the Wine-path conversion from the first Linux
+port still apply. The **Legacy edition** folder is the one to point at (`GTA5.exe`).
 
-## How the port is built
+## How the Linux port is built
 
-| Windows | Linux |
+| Windows (modified build) | Linux port |
 |---|---|
-| WinForms + Microsoft WebView2 window (`AppWindow.cs`) | `native/mlo-shell.c`: a small GTK 3 window with a WebKit2GTK view. It is a separate process with its own main loop; the .NET host starts it and waits for it, like the old WebView2 path. The same binary is the GTK file/folder picker (`--pick-files`, `--pick-folder`). |
+| WinForms + WebView2 window | `native/mlo-shell.c`: a GTK 3 window with a WebKit2GTK view; also the GTK file/folder picker. It is a separate process with its own main loop; the .NET host starts it and waits. |
 | .NET Framework 4.8 + `csc.exe` | .NET 9 SDK project (`src/MloCreator.csproj`), `dotnet build` / `dotnet publish`. |
-| CodeWalker DLLs from a Windows build | `CodeWalker.Core` 1.0.3 from NuGet (the same library, `netstandard2.0`) + SharpDX mathematics. The RPF/`ydr`/`ybn`/`ytd`/`ytyp`/`ymap` code is unchanged. |
-| `GTA5Keys.LoadFromPath` (builds `path + "\gta5.exe"`) | `src/GameKeys.cs`: reads `GTA5.exe` itself, finds the AES key with `GenerateV2`, then unlocks CodeWalker's NG keys/hash LUT with its `UseMagicData` step. |
-| `System.Web.Script.Serialization.JavaScriptSerializer` | `src/Compat/Json.cs`: a drop-in class with the same shape (`Dictionary<string,object>`, `List<object>`, ...) on `System.Text.Json`. |
-| `System.Drawing` (GDI+) for `.glb` textures and the house-fit debug PNG | `StbImageSharp` decodes PNG/JPEG; `src/Compat/ImageUtil.cs` scales to the game's power-of-two square, and writes the 720×720 debug PNG with a small built-in PNG encoder. |
-| WinForms `OpenFileDialog` / `FolderBrowserDialog` | the GTK native file chooser (`GtkFileChooserNative`, so the desktop portal is used when there is one), with `zenity`/`kdialog` fallbacks. |
-| `explorer.exe`, registry, `LOCALAPPDATA`, Edge/Chrome paths | `xdg-open`, Steam library discovery, `~/.local/share`, and a Chromium/Chrome/Brave/Edge app window (or the default browser) as the `--browser` fallback. |
-| Serve the editor from `ui\` with backslashes | the same server, with `/` path handling and a traversal check. |
+| CodeWalker Windows DLLs | the exact `CodeWalker.Core.dll`, `SharpDX.dll` and `SharpDX.Mathematics.dll` from the modified Windows build, kept in [`lib/`](lib) (netstandard2.0). |
+| `GTA5Keys.LoadFromPath` | `src/GameKeys.cs`: reads `GTA5.exe`, finds the AES key, unlocks CodeWalker's NG keys/LUT. |
+| `JavaScriptSerializer` | `src/Compat/Json.cs` on `System.Text.Json`. |
+| `System.Drawing` | StbImageSharp + a small PNG encoder (`src/Compat/ImageUtil.cs`). |
+| WinForms dialogs, registry, `explorer.exe` | GTK native chooser; Steam/GTA detection; `xdg-open`; XDG paths (`src/Linux.cs`). |
+| The modified editor in `source/ui` and its textures | Ported to [`ui/`](ui): all modified JS/HTML/CSS, the 1,200-image PNG library, `runtime/garage-*.lua`, `gridmodels.js`, `props.js`, `proptransforms.js`, `storeys.js`, `texture-catalog.js` and the Crimtopia theme. The old Windows page stays in `source/ui`. |
+| Modified `.glb` library | [`models/`](models): the three original models plus the MIT up-and-over garage panel. |
 
-The editor in [`../source/ui`](../source/ui) is **shared**, not copied into this folder: the csproj copies
-it into the build/publish output. Changes to the page still only need a reload; changes to the C# need a
-rebuild.
+The C# changes from the modified build were merged into `src/Exporter.cs`, `src/FitExport.cs`,
+`src/GlbModels.cs` and the new `src/GarageExport.cs`, while keeping the Linux-only replacements above
+(especially the StbImageSharp texture decoding). The rest of the host (`Program`, `ImportHost`,
+`ModelCut`, `CollisionCut`, `Vanilla`, `HouseFit`, `Patcher`, `Dds`) is the same as the first Linux port.
 
-The X11/Wayland choice is made by GTK. Set `GDK_BACKEND=x11` or `GDK_BACKEND=wayland` to force one (the
-port logs which backend it used in `logs/window.log`).
+### Collision parity with the Windows export
+
+The first Linux build referenced CodeWalker.Core 1.0.3 from NuGet. That build writes the collision
+resource with a different material/vertex order; for the “Try House” project it produced **1,108
+triangles that did not match the Windows export**, so the game’s bounds BVH did not cover the walls and
+furniture correctly (invisible wall holes, furniture collision not working).
+
+The port now uses the exact CodeWalker/SharpDX DLLs that the modified Windows application uses, from
+`lib/`. With them the exported `q3_mlo.ybn` has the same 2,556 collision triangles, the same
+material/room assignment and full BVH coverage as the Windows export; the visual triangles of
+`q3_int.ydr`, `q3_ext.ydr` and the door `.ydr` files also match. **Re-export existing resources with this
+build** (or install the packaged build) so the old collision files are replaced.
+
+The X11/Wayland choice is made by GTK. Set `GDK_BACKEND=x11` or `GDK_BACKEND=wayland` to force one; the
+port logs which backend it used in `logs/window.log`.
 
 ### The native window
 
-`native/mlo-shell.c` (about 400 lines) does:
+`native/mlo-shell.c` does:
 
 - one 1600×960 GTK window, title `MLO Creator`, window icon from `ui/logo.png`, size memory in
   `cache/window/window.txt`;
-- WebKit settings: WebGL on, hardware acceleration, console messages to stdout, clipboard access for the
-  "Copy details"/"Copy ensure" buttons, no browser context menu, no page zoom/reload/back-forward keys
-  (F12 opens the inspector only with `--devtools`);
-- it refuses navigation away from the editor (a file dropped on the page cannot replace it) and blocks
-  new windows;
-- on close it asks the page to save (`MLO.Model.save()`), gives it a moment, then closes; the host also
-  waits for a running export to finish before exiting, so a closed window cannot leave a half-written
-  resource folder;
-- it exits if the host process disappears (`--parent`).
+- WebKit settings: WebGL on, hardware acceleration, console messages to stdout, clipboard access,
+  no browser context menu, no page zoom/reload/back-forward keys (F12 opens the inspector only with
+  `--devtools`);
+- it refuses navigation away from the editor and blocks new windows;
+- on close it asks the page to save (`MLO.Model.save()`), gives it a moment, then closes; the host waits
+  for a running export to finish before exiting;
+- it exits if the host process disappears (`--parent`);
+- page snapshots (`--screenshot`) work on both X11 and Wayland through WebKit's snapshot API.
 
 ### Developer hooks
 
-The window program has three hooks used while porting and for automated checks:
-
 ```bash
-mlo-shell --url URL --eval-file script.js [--eval-exit]   # run a JS body in the page, print MLO_EVAL_RESULT
-mlo-shell --url URL --screenshot out.png [--screenshot-exit]  # save the window contents (X11)
-mlo-shell --url URL --close-after 12                      # close the window as the user would (testing)
-mlo-shell --url URL --devtools                            # WebKit inspector (F12)
+mlo-shell --url URL --eval-file script.js [--eval-exit]       # run a JS body, print MLO_EVAL_RESULT
+mlo-shell --url URL --screenshot out.png [--screenshot-exit]  # save the page as a PNG (X11 + Wayland)
+mlo-shell --url URL --close-after 12                          # close the window as the user would
+mlo-shell --url URL --devtools                                # WebKit inspector (F12)
 ```
 
 The host has `--debug-api` (writes the last `/api/export` request to `logs/export-payload.json`) and
@@ -166,69 +181,57 @@ The host has `--debug-api` (writes the last `/api/export` request to `logs/expor
 
 ## Verification done
 
-- `dotnet build` and the native shell build cleanly on .NET 9 / GTK 3.24 / WebKitGTK 2.54.
-- The editor loads in WebKitGTK with **WebGL 2.0** (checked with an in-page probe), on Wayland and on
-  X11 (`GDK_BACKEND=x11`, XWayland): both windows render the UI and the imported model
-  (screenshots above).
-- Opening `projects/My Interior.mlo.json`: 3 imported `.ydr` files, 16 textures, 3 openings, 6 deleted
-  faces; the UI meshes 26 interior triangles and draws the 7,415-triangle building.
-- Exporting that project from the UI: the resource is written to `output/mlo_paleto` (interior `.ydr`,
-  glass/tex `.ytd`, collision `.ybn`, `_types.ytyp` with 2 rooms and 3 portals, `_milo_.ymap`, manifest,
-  the cut 1.2 MB building `.ydr`, `cs1_07_9.ybn` and `hi@cs1_07_7.ybn`), and every file was loaded again
-  with CodeWalker. The cut model and collision contain the expected changed/removed/added counts.
-- Window/door/frame export from the three bundled `.glb` files: 2 window parts baked, the door written as
-  a prop with a box collision and door flags, 8 textures; all files re-open with CodeWalker.
-- Game lookups on the local GTA V install: the building entity in `cs1_07_strm_0.ymap`, 86 collision
-  files with polygon counts, the detail-model placements, 52 plants / 95 props around the building, and
-  the full `--grab` house fit (frame, outline, door) with the debug PNG.
-- `--no-window` API runs for import, cut preview, collision preview, export and all game lookups.
+- The Linux port builds cleanly (C# + the native shell), runs without .NET from the self-contained
+  package, and the real project `projects/My Interior.mlo.json` opens in the rebuilt editor.
+- Both backends: the shell logged `display X11 (:0)` and `display Wayland (wayland-1)`, loaded the page,
+  opened the project (3 models, 16 textures) and produced the page snapshots above. WebGL 2.0 was probed
+  in the first port; the rebuilt page uses the same renderer.
+- **Upstream tests:** the modified build's non-browser test suite (editor, floors/storeys, grid models,
+  furniture, props, transforms, archways, paint faces, texture finishing) was run against `linux/ui`:
+  **69 passed, 1 skipped** (the skipped one needs a wooden-door fixture). This covers the new geometry,
+  save/load, undo/redo, collision and export payloads.
+- **Texture library:** `MLO.texturePhotos.length` is 1,200; a catalog PNG is served (HTTP 200, 389 KB);
+  the Paint tab shows Added floors/Added walls.
+- **Collision parity:** the “Try House” grid project was exported on Linux and compared with the same
+  project exported by the Windows application. With the Windows CodeWalker/SharpDX DLLs the canonical
+  collision set is identical (2,556 triangles, material/room counts, winding), and the BVH has full
+  coverage (1,601 nodes, 801 leaves, 19 trees). The old NuGet CodeWalker build had **1,108 differing
+  triangles**, which explains the in-game holes/furniture collision. The visual meshes (`q3_int.ydr`,
+  `q3_ext.ydr`, `q3_fd1.ydr`) also match triangle for triangle.
+- **Real export:** the project exported with the new exporter to `output/mlo_paleto`. CodeWalker re-opened
+  every file: the interior `.ydr` (26 triangles, 2 textures), the MLO `.ytyp` (2 rooms, 3 portals,
+  1 entity), the placement YMAP with `numExitPortals=3`, and the cut building model/collision. The
+  `fxmanifest.lua` no longer double-registers the interior with `DLC_ITYP_REQUEST`.
+- **Garage doors:** a test building with the bundled up-and-over panel exported `gd1.ydr` (72 triangles,
+  box collision), `garage_config.lua`, `client/garages.lua`, `server/garages.lua`, the OneSync
+  dependency and the garage README section.
+- **Exterior/portals:** a test with two touching portal fragments and a room-0 group merged the fragments
+  into one opening, put the exterior mesh in the YMAP as a world entity and recorded one exit portal.
+- **File dialog, save-on-close, packaged app:** the GTK picker opens; closing the window saves the
+  project; the self-contained package starts and exports without a .NET installation.
 
-## Troubleshooting
-
-**A blank white or black window.** WebKitGTK's GPU path can fail on some drivers (especially in a VM or
-a remote session). Try:
-
-```bash
-WEBKIT_DISABLE_DMABUF_RENDERER=1 ./run.sh
-WEBKIT_DISABLE_COMPOSITING_MODE=1 ./run.sh      # slower, software compositing
-LIBGL_ALWAYS_SOFTWARE=1 ./run.sh                # software WebGL
-```
-
-The port logs the reason to `logs/window.log`. `./run.sh --browser` opens the same editor in a Chromium
-or Chrome app window (or the default browser) if WebKitGTK cannot start; the native file dialogs still
-work through `zenity`/`kdialog` if installed.
-
-**No window at all.** Check `logs/window.log` for "the native window (mlo-shell) is not there"; build it
-with `./build.sh` or `bash native/build-shell.sh <folder>`. Check that the display is reachable
-(`DISPLAY` or `WAYLAND_DISPLAY`).
-
-**The game is not found.** Put the folder in `settings.json` as `"gtaPath"`, or set `GTA5_PATH`. The
-program looks for `GTA5.exe` (Legacy). The Enhanced edition is not supported by this CodeWalker version;
-point it at the Legacy install.
-
-**The file dialog does not open.** The native picker needs GTK; if it is missing, install `zenity` or
-`kdialog` as a fallback. On a minimal Wayland session without the desktop portal, GTK shows its own
-dialog.
-
-**Clipboard buttons do nothing.** WebKit asks for clipboard permission; the window allows it. On a very
-old WebKitGTK (before 2.40) the Clipboard API may be disabled; the text is still shown in the error
-details.
-
-**Logs.** `logs/window.log` (window start, backend, WebKit messages, exit code), `logs/errors.log` (what
-the page reports), and the terminal output when run from a shell.
+Still to be seen in the game, exactly as the modified build says: GTA's streaming, lighting, portals,
+collision, door/garage movement, furniture appearance and sign pixels. Export the resource, install it,
+restart the map, reconnect clients and test on both sides. Garage doors additionally need OneSync and the
+included controller; the editor cannot validate the game's player/vehicle controller.
 
 ## Limits
 
-- The Windows build is untouched in [`../source`](../source); this is a parallel tree. The shared `ui/`
-  is the canonical editor.
-- Everything that needs the game running (streaming, lights, portals, doors) still has to be tested in
-  game, exactly as the Windows version says.
-- The Enhanced edition, and a GTA V installed through a non-Steam launcher that is not in a Steam
-  library, need `gtaPath` set by hand.
-- `.glb` textures are decoded by StbImageSharp; unusual image formats inside a `.glb` fall back to the
-  material colour, like a GTA texture that the files do not contain.
-- The native window is GTK 3 (the installed `webkit2gtk-4.1` is a GTK 3 library). A GTK 4/WebKit 6.0
-  variant would be a separate shell; the host and the editor would not change.
+- One interior room plus the outside room per building; all floors share that room. This does not add
+  separate GTA room IDs, sound isolation or visibility portals between storeys.
+- The two-room exporter supports at most **96 exterior portals after joining fragments** (the guard from
+  the modified build). Split the project into buildings if it triggers.
+- The imported model and its collision are cut by the openings; the editor still cannot test the game's
+  streaming, lighting, portal culling or door/garage controller.
+- The garage controller requires OneSync; it moves a client-side panel and its collision, with
+  server-side proximity/bucket/ACE checks. Test it with players and vehicles in-game.
+- Signs use installed system fonts through the browser canvas; the exported texture is fixed, but a
+  project opened on another machine may preview a fallback font before export.
+- The **Enhanced edition** of GTA V is not supported by this CodeWalker version; use the Legacy folder.
+- The added `smdz_*` wall/floor photographs are supplied with the modified build, not generated by MLO
+  Creator. They are not covered by the MIT licence; check their terms before redistributing them.
+- The Windows build in `../source` is untouched. `linux/ui` is the ported editor; the old page remains in
+  `source/ui` for the Windows build.
 
 ## Layout
 
@@ -238,27 +241,29 @@ the page reports), and the terminal output when run from a shell.
 | `src/AppWindow.cs` | starts the native window and the fallback browser |
 | `src/Linux.cs` | Linux paths, Steam/GTA detection, GTK dialogs, `xdg-open`, browser fallback |
 | `src/GameKeys.cs` | CodeWalker keys from `GTA5.exe` on Linux |
-| `src/ImportHost.cs`, `ModelCut.cs`, `CollisionCut.cs` | import, cutting (unchanged logic) |
+| `src/ImportHost.cs`, `ModelCut.cs`, `CollisionCut.cs` | import, cutting |
 | `src/Vanilla.cs`, `HouseFit.cs`, `Patcher.cs` | game file lookups and the vanilla house workflow |
-| `src/Exporter.cs`, `FitExport.cs` | the resource and the door/window props |
+| `src/Exporter.cs`, `FitExport.cs`, `GarageExport.cs` | resource, fitted door/window/garage props, ports |
 | `src/GlbModels.cs`, `Dds.cs` | `.glb` reading and DDS writing |
 | `src/Compat/Json.cs`, `Compat/ImageUtil.cs` | `JavaScriptSerializer` and `System.Drawing` replacements |
-| `native/mlo-shell.c` | the GTK 3 + WebKit2GTK window and the file dialogs |
-| `desktop/mlo-creator.desktop` | the application-menu entry |
-| `build.sh`, `run.sh`, `package.sh`, `install.sh` | build, run, package (self-contained + zip) and install |
+| `native/mlo-shell.c` | GTK 3 + WebKit2GTK window and file dialogs |
+| `ui/` | the rebuilt editor (all modified JS/HTML/CSS, 1,200 PNG textures, garage Lua runtime) |
+| `models/` | the four bundled `.glb` models and their credits |
+| `docs/` | the modified feature documentation and how-it-works |
+| `desktop/`, `build.sh`, `run.sh`, `package.sh`, `install.sh` | desktop entry and build/run/package/install |
+| `tests/` | the manual page/eval checks used while porting |
 
 ## Credits and licences
 
 MLO Creator's own code is MIT ([`../source/LICENSE`](../source/LICENSE)). The Linux port adds:
 
-- **StbImageSharp** (public domain) for decoding the pictures in `.glb` files.
-- **GTK 3** (LGPL-2.1) and **WebKitGTK** (LGPL-2.1 / BSD) — system libraries, not redistributed in the
-  source tree. The self-contained package links them at run time.
-- **.NET 9** (MIT) — the self-contained package includes the runtime.
-- **CodeWalker.Core** (the same CodeWalker library the Windows build uses; see the repository's
-  `THIRD-PARTY-NOTICES.md`) and **SharpDX** mathematics (MIT).
+- **StbImageSharp** (public domain) for `.glb` pictures.
+- **GTK 3** (LGPL-2.1) and **WebKitGTK** (LGPL-2.1 / BSD) — system libraries.
+- **.NET 9** (MIT) — included in the self-contained package.
+- **CodeWalker.Core** / **SharpDX** — the same CodeWalker terms as the Windows build.
+- The bundled `.glb` models keep their own licences (one is non-commercial); see
+  [`models/CREDITS.txt`](models/CREDITS.txt). The up-and-over garage panel is original MLO Creator
+  artwork under MIT.
+- The `smdz_*` wall/floor photographs were supplied with the modified build; see the note in **Limits**.
 
-The three models in `models/` keep their own licences (one is non-commercial); see
-[`../source/models/CREDITS.txt`](../source/models/CREDITS.txt) and
-[`../source/THIRD-PARTY-NOTICES.md`](../source/THIRD-PARTY-NOTICES.md). GTA V and its assets belong to
-Rockstar Games; this project ships none of them.
+GTA V and its assets belong to Rockstar Games; this project ships none of them.

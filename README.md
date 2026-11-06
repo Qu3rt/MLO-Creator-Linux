@@ -43,8 +43,10 @@ Command line options: `--browser` (use an Edge or Chrome app window), `--devtool
 
 ## Linux
 
-The native Linux port is in [`linux/`](linux/README.md). It uses the same editor and the same CodeWalker
-library, with a GTK 3 / WebKit2GTK window instead of WebView2, and builds with the .NET 9 SDK:
+The native Linux port is in [`linux/`](linux/README.md). It includes the rebuilt editor from the modified
+build by Kynan published on Discord (multi-storey, half/quarter walls, face painting and the 1,200-image texture library, the full
+window/door/frame/garage library, furniture, signs and the new exporter rules) on top of the same
+CodeWalker library, with a GTK 3 / WebKit2GTK window instead of WebView2. It builds with the .NET 9 SDK:
 
 ```bash
 cd linux

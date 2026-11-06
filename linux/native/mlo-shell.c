@@ -166,24 +166,32 @@ static void on_title(GObject *obj, GParamSpec *pspec, gpointer data)
     gtk_window_set_title(GTK_WINDOW(a->window), (t && *t) ? t : MLO_TITLE);
 }
 
-/* ---------------- developer hook: save the window contents (works on X11) ---------------- */
+/* ---------------- developer hook: save the page as a PNG (works on X11 and Wayland) ---------------- */
+static void on_snapshot(GObject *source, GAsyncResult *res, gpointer user_data)
+{
+    App *a = (App *)user_data;
+    GError *err = NULL;
+    cairo_surface_t *surface = webkit_web_view_get_snapshot_finish(WEBKIT_WEB_VIEW(source), res, &err);
+    if (!surface) {
+        log_line("mlo-shell: snapshot failed: %s", err ? err->message : "?");
+        if (err) g_error_free(err);
+    } else {
+        if (cairo_surface_write_to_png(surface, a->shot_file) == CAIRO_STATUS_SUCCESS)
+            printf("MLO_SCREENSHOT:%s\n", a->shot_file);
+        else
+            log_line("mlo-shell: snapshot could not be written to %s", a->shot_file);
+        fflush(stdout);
+        cairo_surface_destroy(surface);
+    }
+    if (a->shot_exit) gtk_main_quit();
+}
+
 static gboolean take_screenshot(gpointer data)
 {
     App *a = (App *)data;
-    if (!a->shot_file || !a->window) return G_SOURCE_REMOVE;
-    GdkWindow *w = gtk_widget_get_window(a->window);
-    if (!w) { log_line("mlo-shell: screenshot: no window"); return G_SOURCE_REMOVE; }
-    int width = gdk_window_get_width(w), height = gdk_window_get_height(w);
-    GdkPixbuf *pb = gdk_pixbuf_get_from_window(w, 0, 0, width, height);
-    if (!pb) { log_line("mlo-shell: screenshot: this backend does not allow reading the window"); }
-    else {
-        GError *err = NULL;
-        if (gdk_pixbuf_save(pb, a->shot_file, "png", &err, NULL)) printf("MLO_SCREENSHOT:%s\n", a->shot_file);
-        else { log_line("mlo-shell: screenshot failed: %s", err ? err->message : "?"); if (err) g_error_free(err); }
-        fflush(stdout);
-        g_object_unref(pb);
-    }
-    if (a->shot_exit) gtk_main_quit();
+    if (!a->shot_file || !a->web) { if (a->shot_exit) gtk_main_quit(); return G_SOURCE_REMOVE; }
+    webkit_web_view_get_snapshot(WEBKIT_WEB_VIEW(a->web), WEBKIT_SNAPSHOT_REGION_VISIBLE,
+                                 WEBKIT_SNAPSHOT_OPTIONS_NONE, NULL, on_snapshot, a);
     return G_SOURCE_REMOVE;
 }
 
@@ -405,7 +413,7 @@ static void usage(void)
     printf("mlo-shell %s - the native window and file dialogs of MLO Creator\n", MLO_VERSION);
     printf("  --url URL [--data DIR] [--icon FILE] [--devtools] [--parent PID]\n");
     printf("  --eval-file FILE [--eval-exit]  run a JS file in the page (developer/testing hook)\n");
-    printf("  --screenshot FILE [--screenshot-exit]  save the window contents (developer/testing hook)\n");
+    printf("  --screenshot FILE [--screenshot-exit]  save the page as a PNG (developer/testing hook)\n");
     printf("  --close-after SECONDS            close the window as if the user did (testing hook)\n");
     printf("  --pick-files [--last DIR]   print the picked files, one per line\n");
     printf("  --pick-folder [--last DIR]  print the picked folder\n");

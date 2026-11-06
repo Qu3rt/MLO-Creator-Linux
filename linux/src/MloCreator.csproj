@@ -18,14 +18,32 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="CodeWalker.Core" Version="1.0.3" />
     <PackageReference Include="StbImageSharp" Version="2.30.15" />
   </ItemGroup>
 
-  <!-- the editor is shared with the Windows build: it is copied into the output, not duplicated in this tree -->
+  <!-- The exact CodeWalker.Core/SharpDX build the modified Windows application uses. The NuGet 1.0.3
+       build writes collision resources differently (material/vertex ordering), which changes how the
+       game builds the bounds BVH; using the Windows build's own libraries keeps the exported files
+       identical. They are netstandard2.0 and run on Linux. -->
   <ItemGroup>
-    <Content Include="$(MSBuildThisFileDirectory)../../source/ui/**/*" Link="ui/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="$(MSBuildThisFileDirectory)../../source/models/**/*" Link="models/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Reference Include="CodeWalker.Core">
+      <HintPath>$(MSBuildThisFileDirectory)../lib/CodeWalker.Core.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="SharpDX">
+      <HintPath>$(MSBuildThisFileDirectory)../lib/SharpDX.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="SharpDX.Mathematics">
+      <HintPath>$(MSBuildThisFileDirectory)../lib/SharpDX.Mathematics.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- the editor (ported from the modified build) and its models are copied into the output -->
+  <ItemGroup>
+    <Content Include="$(MSBuildThisFileDirectory)../ui/**/*" Link="ui/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="$(MSBuildThisFileDirectory)../models/**/*" Link="models/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
