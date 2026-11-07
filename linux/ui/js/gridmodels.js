@@ -41,7 +41,7 @@ window.MLO = window.MLO || {};
     };
     G.cut = function (f) {
         if (f.kind === 'garage') return { cx: f.cx, cy: f.cy, zb: f.zb, w: round(f.w + 0.012), h: round(f.h + 0.006) };
-        if (f.kind === 'door') return { cx: f.cx, cy: f.cy, zb: f.zb, w: round(f.w + 2 * G.doorGap(f)), h: round(f.h + G.doorReveal) };
+        if (f.kind === 'door') return { cx: f.cx, cy: f.cy, zb: f.zb, w: round(f.w), h: round(f.h) };
         const z = f.kind === 'frame' && f.zb < 0.02 ? 0 : f.zb + 0.01;
         return { cx: f.cx, cy: f.cy, zb: z, w: f.w - 0.02, h: f.zb + f.h - 0.01 - z };
     };

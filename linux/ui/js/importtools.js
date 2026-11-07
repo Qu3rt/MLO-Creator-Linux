@@ -35,7 +35,12 @@ window.MLO = window.MLO || {};
     // where a new cutter goes for the surface under the pointer: on the model, or on a wall of the interior
     function surfaceAt(ray) {
         const mh = IM.pick(ray), sp = SH.pick(ray);
-        if (sp && sp.kind === 'part' && (!mh || sp.t < mh.t)) return { part: sp };
+        if (sp && sp.kind === 'part' && (!mh || sp.t < mh.t)) {
+            // a partition is a generated wall too: give the placement tools the surface point and the normal facing the viewer
+            const pt = sp.pt, horiz = pt.o === 'H', z = ray.o[2] + ray.d[2] * sp.t;
+            const n = horiz ? [0, sp.n < pt.c ? -1 : 1] : [sp.n < pt.c ? -1 : 1, 0];
+            return { p: [sp.px, sp.py, z], n, shell: true, part: sp };
+        }
         if (sp && sp.kind === 'seg' && (!mh || sp.t < mh.t + 0.05)) {
             const sg = sp.sg, n = sg.o === 'H' ? [0, sg.inward] : [sg.inward, 0];
             return { p: [sp.px, sp.py, 1.0], n, shell: true };
@@ -63,6 +68,8 @@ window.MLO = window.MLO || {};
         hover = { ray, tool: t };
         if (t === 'arch') { hover.cut = pickCutter(ray); hover.surf = surfaceAt(ray); }
         else if (t === 'door' || t === 'window') {
+            // a partition or a room wall under the pointer uses the shell opening tools; the model's faces use the cutters
+            hover.surf = surfaceAt(ray);
             // the faces of the model under the pointer: the flat patch around the face (Shift: just that triangle)
             hover.cut = pickCutter(ray); const o = IM.pickOriginal(ray); hover.face = o;
             if (o) { const key = o.g + ':' + o.tri + ':' + (e.shiftKey ? 1 : 0); if (!patchCache || patchCache.key !== key) patchCache = { key, g: o.g, tris: e.shiftKey ? [o.tri] : IM.flatPatch(o.g, o.tri) }; hover.patch = patchCache; } else patchCache = null;
@@ -98,7 +105,12 @@ window.MLO = window.MLO || {};
         if (t === 'fill') { fillDown(); return; }
         if (t === 'edges') { edgesDown(e); return; }
         if (t === 'figure') { figureDown(); return; }
-        if (t === 'door' || t === 'window') { faceOpeningDown(t, e); return; }
+        if (t === 'door' || t === 'window') {
+            const s = hover.surf, ch = hover.cut;
+            // a partition (or a room wall) is a generated wall: ShellTools cuts the opening and adds the casing
+            if (s && s.part && !(ch && ch.t < s.part.t + 0.3)) { SH.down(e); return; }
+            faceOpeningDown(t, e); return;
+        }
         if (t === 'arch') {
             const s = hover.surf, ch = hover.cut;
             if (ch && (!s || s.part || ch.t < (s.mh ? s.mh.t : 1e9) + 0.3)) { selectCutter(ch.k.id); startDrag(ch.k, e); return; }
@@ -249,7 +261,14 @@ window.MLO = window.MLO || {};
         if (M.FitModels.dragging()) { M.FitModels.move(e); return; }
         if (rd) { roomMove(e); return; }
         if (lvl) { levelMove(e); return; }
-        if (!drag) { if (S.shellTool === 'room' || S.shellTool === 'cut' || S.shellTool === 'part' || S.shellTool === 'floor' || S.shellTool === 'paint') SH.move(e); return; }
+        if (!drag) {
+            if (S.shellTool === 'door' || S.shellTool === 'window' || S.shellTool === 'arch') {
+                if (hover && hover.surf && hover.surf.part) SH.move(e);
+                return;
+            }
+            if (S.shellTool === 'room' || S.shellTool === 'cut' || S.shellTool === 'part' || S.shellTool === 'floor' || S.shellTool === 'paint') SH.move(e);
+            return;
+        }
         const k = drag.k0, cs = Math.cos(k.yaw), sn = Math.sin(k.yaw), n = [-sn, cs], ray = hover.ray;
         const dn = ray.d[0] * n[0] + ray.d[1] * n[1]; if (Math.abs(dn) < 0.04) return;
         const t = ((k.cx - ray.o[0]) * n[0] + (k.cy - ray.o[1]) * n[1]) / dn; if (t < 0) return;
@@ -1092,6 +1111,7 @@ window.MLO = window.MLO || {};
             const r = M.Plants.tool.draw(R); if (r) { text = r.text; at = r.at; }
         }
         if (t === 'room' || t === 'cut' || t === 'part' || t === 'floor' || t === 'select' || t === 'eraser' || t === 'paint') SH.draw(R, label);
+        else if ((t === 'door' || t === 'window' || t === 'arch') && hover && hover.surf && hover.surf.part) SH.draw(R, label);
         else label(text, at);
         if (t === 'select') drawRoomSel(R); else M.App.canvas.style.cursor = t === 'cbox' ? cbCursor() : '';
     }

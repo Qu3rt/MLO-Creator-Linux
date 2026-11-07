@@ -140,7 +140,9 @@ window.MLO = window.MLO || {};
     // The wall cut of a door: the size of the door-shaped opening it was fitted to (it.cut = { w, h, du, dz }: the hole's size, and where its middle is from the door's middle along the
     // wall and in height), else the door plus its room, 2 cm higher, moved towards the hinge side. Returns the hole: middle (cx, cy), bottom, width, height.
     FM.doorCut = function (it) {
-        const rm = doorRoom(it); let w = it.w + 2 * rm.gap, z0 = it.zb, h = it.h + 0.02;
+        // The wall cut is the door's own size unless the door was given an explicit cut. No hidden clearance is added:
+        // Cut width / Cut height start equal to Width / Height.
+        let w = it.w, z0 = it.zb, h = it.h;
         if (it.cut) { w = it.cut.w; h = it.cut.h; z0 = it.zb + (it.cut.dz || 0); }
         const hz = z0 <= 0.02 ? 0 : r3(z0);          // (a door on the floor keeps the floor: no sill piece)
         return { cx: it.cx, cy: it.cy, zb: hz, w: r3(w), h: r3(z0 + h - hz) };
@@ -183,7 +185,9 @@ window.MLO = window.MLO || {};
     // a frame put to the building's door opening: its outside is the opening (its depth and its place across the wall stay)
     function frameFit(it, r) {
         const { U } = axes(it), along = (r.cx - it.cx) * U[0] + (r.cy - it.cy) * U[1];
-        return { cx: r3(it.cx + U[0] * along), cy: r3(it.cy + U[1] * along), zb: r.zb < 0.02 ? 0 : r3(r.zb), w: r3(r.w), h: r3(r.h) };
+        const o = { cx: r3(it.cx + U[0] * along), cy: r3(it.cy + U[1] * along), zb: r.zb < 0.02 ? 0 : r3(r.zb), w: r3(r.w), h: r3(r.h) };
+        if (r.cut) { o.open = false; if (r.src) o.src = r.src; }
+        return o;
     }
     // The door-shaped opening of the building behind a door (the faces the building has where its own door is: the "door cut" the wall is measured from): the flat patch of faces that
     // is about as tall as a door and starts near the floor, found by looking along the wall's normal through the door's area, from outside and from inside. Null when there is none (the
@@ -195,6 +199,7 @@ window.MLO = window.MLO || {};
             let dy = Math.abs((((r.yaw - yawq) % Math.PI) + Math.PI * 1.5) % Math.PI - Math.PI / 2); dy = Math.min(dy, Math.PI - dy);
             const du = (r.cx - it.cx) * U[0] + (r.cy - it.cy) * U[1], dn = (r.cx - it.cx) * N[0] + (r.cy - it.cy) * N[1];
             if (r.w < 0.6 || r.w > 2.6 || r.h < 1.7 || r.h > 2.7 || r.zb > 0.45 || r.zb < -0.3 || dy > 0.15 || Math.abs(du) > Math.max(0.7, it.w) || Math.abs(dn) > 0.8) return;
+            if (r.cut === undefined) r.cut = false;
             found.push({ r, score: Math.abs(du) + Math.abs(dn) * 0.3 });
         };
         [-0.3, 0, 0.3].forEach(fu => [0.3, 0.5, 0.8].forEach(fz => {
@@ -205,15 +210,35 @@ window.MLO = window.MLO || {};
                 const r = IM.faceRect({ g: o.g, tris: IM.flatPatch(o.g, o.tri) }); if (r) accept(r);
             });
         }));
-        // the faces may be gone already (a door cut out with the Door tool): that cut remembers the opening
-        if (!found.length) (imp().cutters || []).forEach(k => { if (k.face && k.type === 'door') accept({ cx: k.cx, cy: k.cy, zb: k.zb, w: k.w, h: k.h, yaw: k.yaw }); });
-        if (!found.length) return null; found.sort((a, b) => a.score - b.score); return found[0].r;
+        // a cut already made with the Door tool (face cut) or the Archway tool (box cut): these are real openings
+        (imp().cutters || []).forEach(k => {
+            if (k.type !== 'door' && k.type !== 'arch') return;
+            if (k.type === 'door' && !k.face) return;
+            accept({ cx: k.cx, cy: k.cy, zb: k.zb, w: k.w, h: k.h, yaw: k.yaw, cut: true, src: { kind: 'cutter', id: k.id } });
+        });
+        // generated openings: a partition (inside to inside) or a room boundary wall (outside to inside)
+        const sh = S.project.shell;
+        const addShell = (o, c, op, src) => {
+            if (!op || (op.type !== 'door' && op.type !== 'arch')) return;
+            const hz = o === 'H';
+            accept({ cx: hz ? (op.u0 + op.u1) / 2 : c, cy: hz ? c : (op.u0 + op.u1) / 2, zb: op.z0, w: op.u1 - op.u0, h: op.z1 - op.z0, yaw: hz ? 0 : Math.PI / 2, cut: true, src });
+        };
+        if (sh) {
+            (sh.parts || []).forEach(pt => (pt.open || []).forEach(op => addShell(pt.o, pt.c, op, { kind: 'part', id: pt.id, op: op.id })));
+            (sh.openings || []).forEach(op => addShell(op.o, op.c, op, { kind: 'opening', id: op.id }));
+        }
+        if (!found.length) return null;
+        // a real cut is preferred over the building's still-present door faces
+        found.sort((a, b) => (b.r.cut ? 1 : 0) - (a.r.cut ? 1 : 0) || a.score - b.score);
+        return found[0].r;
     }
-    // the door sized and put to the opening: its wall cut is the opening, the door is the opening less its room (and 2 cm at the head), moved along the wall so that it sits in it
-    // with its room on the hinge side; the depth and the position across the wall stay as they are
+    // the door sized and put to the opening: its wall cut is the opening and the door has the same width and height,
+    // moved along the wall so that it sits in it; the depth and the position across the wall stay as they are
     function openingFit(it, r) {
-        const { U } = axes(it), rm = doorRoom(it), along = (r.cx - it.cx) * U[0] + (r.cy - it.cy) * U[1];
-        return { cx: r3(it.cx + U[0] * along), cy: r3(it.cy + U[1] * along), zb: r.zb < 0.02 ? 0 : r3(r.zb), w: r3(Math.max(0.5, r.w - 2 * rm.gap)), h: r3(Math.max(1.5, r.h - 0.02)), cut: { w: r3(r.w), h: r3(r.h), du: 0, dz: 0 } };
+        const { U } = axes(it), along = (r.cx - it.cx) * U[0] + (r.cy - it.cy) * U[1];
+        const o = { cx: r3(it.cx + U[0] * along), cy: r3(it.cy + U[1] * along), zb: r.zb < 0.02 ? 0 : r3(r.zb), w: r3(Math.max(0.3, r.w)), h: r3(Math.max(0.3, r.h)), cut: { w: r3(r.w), h: r3(r.h), du: 0, dz: 0 } };
+        if (r.cut) { o.open = false; if (r.src) o.src = r.src; }   // the cut is already there: the door attaches to it and does not cut the wall again
+        return o;
     }
     FM.findOpening = findOpening; FM.openingFit = openingFit;
     FM.matchOpening = function () {
@@ -221,7 +246,7 @@ window.MLO = window.MLO || {};
         const r = findOpening(it);
         if (!r) { toast('No door-shaped opening of the building is behind this ' + it.kind + ' (it may be deleted already): set the size by hand, or put it over the building\'s door faces and try again.', 'warn'); return false; }
         FM.set(it.kind === 'frame' ? frameFit(it, r) : openingFit(it, r));
-        toast(it.kind === 'frame' ? 'The frame\'s outside now matches the building\'s door opening (' + r.w.toFixed(2) + ' x ' + r.h.toFixed(2) + ' m).' : 'The wall cut now matches the building\'s door opening (' + r.w.toFixed(2) + ' x ' + r.h.toFixed(2) + ' m) and the door was sized to sit in it.', 'ok'); return true;
+        toast(r.cut ? (it.kind === 'frame' ? 'The frame was attached to the existing opening (' + r.w.toFixed(2) + ' x ' + r.h.toFixed(2) + ' m); the wall is not cut again.' : 'The door was attached to the existing opening (' + r.w.toFixed(2) + ' x ' + r.h.toFixed(2) + ' m); the wall is not cut again.') : (it.kind === 'frame' ? 'The frame\'s outside now matches the building\'s door opening (' + r.w.toFixed(2) + ' x ' + r.h.toFixed(2) + ' m).' : 'The wall cut now matches the building\'s door opening (' + r.w.toFixed(2) + ' x ' + r.h.toFixed(2) + ' m) and the door was sized to sit in it.'), 'ok'); return true;
     };
     // every door that stands in the selected frame, sized to its opening
     FM.fitDoorsInFrame = function () {
@@ -411,7 +436,7 @@ window.MLO = window.MLO || {};
         Model.edit(P => { (P.import.fits = P.import.fits || []).push(nf); }); FM.sel = nf.id; M.UI.renderLeft();
         const inside = nf.kind === 'frame' ? fits().filter(d => d.kind === 'door' && findFrame(d, [nf])).length : 0;
         if (inside) { toast('Frame placed. ' + inside + ' door' + (inside === 1 ? ' stands' : 's stand') + ' in it: "Fit the doors in it" in the panel sizes ' + (inside === 1 ? 'it' : 'them') + ' to the frame\'s opening.', 'ok'); return; }
-        toast(m.name + ' placed (' + nf.w.toFixed(2) + ' x ' + nf.h.toFixed(2) + ' m)' + (framed ? ', sized to the frame\'s opening' : (fitted ? ', fitted to the building\'s door opening (' + fitted.w.toFixed(2) + ' x ' + fitted.h.toFixed(2) + ' m): the wall cut has that size' : '')) + (wide ? '. The doorway is wide enough for two leaves: tick "Double door" in the panel' : '') + '. Drag the gizmo to move, size or turn it; the wall behind it is yours to delete with the Delete faces tool.', 'ok');
+        toast(m.name + ' placed (' + nf.w.toFixed(2) + ' x ' + nf.h.toFixed(2) + ' m)' + (framed ? ', sized to the frame\'s opening' : (fitted ? (fitted.cut ? ', attached to the existing opening (' + fitted.w.toFixed(2) + ' x ' + fitted.h.toFixed(2) + ' m); the wall is not cut again' : ', fitted to the building\'s door opening (' + fitted.w.toFixed(2) + ' x ' + fitted.h.toFixed(2) + ' m): the wall cut has that size') : '')) + (wide ? '. The doorway is wide enough for two leaves: tick "Double door" in the panel' : '') + '. Drag the gizmo to move, size or turn it; the wall behind it is yours to delete with the Delete faces tool.', 'ok');
     }
 
     // ---------- pointer ----------
@@ -482,7 +507,48 @@ window.MLO = window.MLO || {};
     FM.cancel = function () { if (!drag) return false; FM.up(null, false); return true; };
 
     // ---------- editing ----------
-    FM.set = function (patch, id) { id = id || FM.sel; if (!id) return; Model.edit(P => { const q = (P.import.fits || []).find(f => f.id === id); if (q) Object.assign(q, patch); }); M.UI.renderLeft(); };
+    // Change the wall cut under an attached door as well as the door's own record. The cut is a partition opening,
+    // a room-boundary opening or a cutter (Door/Archway) that the door was attached to.
+    function cutSource(P, q, cut) {
+        let src = q.src;
+        if (!src) { const r = findOpening(q); if (r && r.cut && r.src) { src = r.src; q.src = src; } }
+        if (!src || !cut) return;
+        const w = Math.max(0.2, cut.w || q.w || 0.8), h = Math.max(0.2, cut.h || q.h || 2.0), dz = cut.dz || 0;
+        const z0 = Math.max(0, (q.zb || 0) + dz), rr = (n) => Math.round(n * 1000) / 1000;
+        if (src.kind === 'part') {
+            const pt = (P.shell.parts || []).find(p => p.id === src.id); if (!pt) return;
+            const op = (pt.open || []).find(o => o.id === src.op); if (!op) return;
+            const u = pt.o === 'H' ? q.cx : q.cy, lo = pt.u0 + 0.08, hi = pt.u1 - 0.08;
+            let u0 = Math.max(lo, u - w / 2), u1 = Math.min(hi, u + w / 2);
+            if (u1 - u0 < 0.3) { u0 = Math.max(lo, Math.min(u1 - 0.3, u - 0.15)); u1 = Math.min(hi, u0 + 0.3); }
+            op.u0 = rr(u0); op.u1 = rr(u1);
+            const H = S.project.settings.ceilH * M.Model.wallRatio(pt);
+            op.z0 = rr(Math.min(Math.max(0, z0), Math.max(0, H - 0.1)));
+            op.z1 = rr(Math.min(H, Math.max(op.z0 + 0.1, z0 + h)));
+            return;
+        }
+        if (src.kind === 'opening') {
+            const op = (P.shell.openings || []).find(o => o.id === src.id); if (!op) return;
+            const u = op.o === 'H' ? q.cx : q.cy, H = S.project.settings.ceilH;
+            op.u0 = rr(u - w / 2); op.u1 = rr(u + w / 2);
+            op.z0 = rr(Math.min(Math.max(0, z0), H - 0.1));
+            op.z1 = rr(Math.min(H, Math.max(op.z0 + 0.1, z0 + h)));
+            return;
+        }
+        if (src.kind === 'cutter') {
+            const k = (P.import.cutters || []).find(c => c.id === src.id); if (!k) return;
+            k.w = rr(w); k.h = rr(h); k.zb = rr(z0); k.cx = rr(q.cx); k.cy = rr(q.cy); k.yaw = rr(q.yaw);
+        }
+    }
+    FM.set = function (patch, id) {
+        id = id || FM.sel; if (!id) return;
+        Model.edit(P => {
+            const q = (P.import.fits || []).find(f => f.id === id); if (!q) return;
+            if (patch.cut) cutSource(P, q, Object.assign({}, q.cut || {}, patch.cut));
+            Object.assign(q, patch);
+        });
+        M.UI.renderLeft();
+    };
     // a door becomes a double door (its width is the whole doorway: the leaves keep the size the door had) or a single one again (one leaf of half the width)
     FM.setDouble = function (on) {
         const it = selFit(); if (!it || it.kind !== 'door' || !!it.double === !!on) return;
@@ -578,7 +644,7 @@ window.MLO = window.MLO || {};
                 root.append(chk('Double door: two leaves side by side', () => !!it.double, v => FM.setDouble(v)));
                 if (it.double) root.append(el('div', { class: 'note' }, 'The width is the whole doorway: each leaf is half of it, hinged on the outer edges (the orange lines) and meeting in the middle where their knobs are (the right leaf is the model mirrored). Each leaf is a door prop of its own for your door script. Turning this on doubles the width (each leaf keeps the size the door had), turning it off halves it.'));
             }
-            if (door && !it.double) root.append(el('div', { class: 'row' }, el('label', null, 'Hinge'), k.seg([['l', 'Left'], ['r', 'Right']], it.hinge || 'l', v => FM.set({ hinge: v }))), el('div', { class: 'note' }, 'Seen from the front (the green arrow points to the front); the orange line is the hinge, it starts on the side opposite the knob. The door is a prop of its own that swings about the hinge, with a collision box the thickness of the leaf: your door script (ox_doorlock...) moves it. Its opening in the interior wall is centred on the door, with room each side for the leaf to turn, so it does not catch on the wall.'));
+            if (door && !it.double) root.append(el('div', { class: 'row' }, el('label', null, 'Hinge'), k.seg([['l', 'Left'], ['r', 'Right']], it.hinge || 'l', v => FM.set({ hinge: v }))), el('div', { class: 'note' }, 'Seen from the front (the green arrow points to the front); the orange line is the hinge, it starts on the side opposite the knob. The door is a prop of its own that swings about the hinge, with a collision box the thickness of the leaf: your door script (ox_doorlock...) moves it. The wall cut is centred on the door; Cut width and Cut height below change the actual cut if the leaf needs clearance.'));
             if (door) {
                 root.append(chk('Also block the doorway with solid collision (it stays when a door script opens the door)', () => !!it.solid, v => FM.set({ solid: v })));
                 root.append(el('div', { class: 'note' }, 'The door prop has its own collision box. If the game gives you no collision there, turn this on: the doorway is blocked by the interior\'s own collision, which always works, but it stays blocked when the door is swung open.'));
@@ -602,11 +668,11 @@ window.MLO = window.MLO || {};
                     num('Cut height', () => f2(dc.h, 3), v => FM.set({ cut: { w: dc.w, h: r3(Math.max(0.5, v)), du: 0, dz: it.cut ? it.cut.dz : 0 } }), '0.01', 'm'));
                 root.append(el('div', { class: 'row wrap' }, el('button', { class: 'btn sm primary', title: 'Look behind the door for the door-shaped faces of the building and copy their size', onclick: () => FM.matchOpening() }, 'Match the building\'s door opening'),
                     it.cut ? el('button', { class: 'btn sm', onclick: () => FM.set({ cut: null }) }, 'Back to the door size') : null));
-                root.append(el('div', { class: 'note' }, it.cut ? 'The wall cut is the size of the building\'s own door opening (the faces you delete there), so the room\'s wall and the building\'s hole line up; the door is sized to sit in it with room to swing.' : 'The wall cut is centred on the door: the door plus the same gap on each side, enough for the leaf to turn about its hinge. Put the door over the building\'s door faces (or press the button) to cut the room\'s wall to the same size as the building\'s opening, with the door in the middle of it.'));
+                root.append(el('div', { class: 'note' }, it.cut ? 'The wall cut is the opening this door was attached to. Cut width and Cut height change that actual opening, inside room walls and outside cuts alike.' : 'The wall cut starts at the size of the door (Cut width and Cut height are the same as Width and Height). Changing them changes the actual wall cut. Put the door over an existing cut to attach to it instead.'));
             }
             root.append(chk('Cuts the building and interior wall here (with portal / glass collision)', () => it.open !== false, v => FM.set({ open: v })));
             root.append(el('div', { class: 'h' }, 'The wall behind it'));
-            root.append(el('div', { class: 'note' }, 'Opening-enabled models clear the building wall and collision within a 0.8 m deep opening. For thicker walls, add a matching box cutter with greater depth.'));
+            root.append(el('div', { class: 'note' }, 'Opening-enabled models clear the building wall and collision within a 0.8 m deep opening. Placed over an existing door or arch cut, the model attaches to it and does not cut the wall again. For thicker walls, add a matching box cutter with greater depth.'));
             root.append(el('div', { class: 'row wrap' }, el('button', { class: 'btn sm', onclick: () => IT().faces.selectBehind(FM.boxOf(it)) }, 'Select the wall faces behind it'), el('button', { class: 'btn sm', onclick: () => IT().colBehind(FM.boxOf(it)) }, 'Select the building\'s collision there')));
         }
         const list = fits();
