@@ -317,6 +317,118 @@ window.MLO = window.MLO || {};
         const uc = (u0 + u1) / 2, nc = ns / pts.length, r3 = (v) => Math.round(v * 1000) / 1000;
         return { cx: r3(uc * cs - nc * sn), cy: r3(uc * sn + nc * cs), zb: r3(z0), w: r3(u1 - u0), h: r3(z1 - z0), yaw: Math.round(yaw * 100000) / 100000, d: 0.8 };
     };
+    // The wall base of a flat wall face: the straight bottom edges of its flat patch, merged into runs.
+    // Returns { rect, h, z, segments: [{ a, b, n }] } in the grid's frame; n points into the room.
+    IM.faceBase = function (face) {
+        const r = IM.faceRect(face); if (!r) return null;
+        const m = IM.targetModel(); if (!m) return null;
+        const g = m.geoms.find(x => x.g === face.g); if (!g) return null;
+        const vp = [], vk = new Map(), keyOf = (p) => p.map(v => Math.round(v * 1000)).join(',');
+        const vid = (p) => { const k = keyOf(p); let i = vk.get(k); if (i === undefined) { i = vp.length; vk.set(k, i); vp.push(p); } return i; };
+        const edges = new Map();
+        (face.tris || []).forEach(t => {
+            const ids = [0, 1, 2].map(q => { const i = g.idx[t * 3 + q] * 3; return vid(IM.toShell(g.pos[i], g.pos[i + 1], g.pos[i + 2])); });
+            for (let e = 0; e < 3; e++) {
+                const a = ids[e], b = ids[(e + 1) % 3]; if (a === b) continue;
+                const k = a < b ? a + '_' + b : b + '_' + a, ed = edges.get(k);
+                if (ed) ed.n++; else edges.set(k, { a, b, n: 1 });
+            }
+        });
+        const zmin = Math.min(...vp.map(p => p[2]));
+        const bottom = [...edges.values()].filter(ed => ed.n === 1 && vp[ed.a][2] <= zmin + 0.02 && vp[ed.b][2] <= zmin + 0.02)
+            .map(ed => ({ a: vp[ed.a].slice(), b: vp[ed.b].slice() }));
+        if (!bottom.length) return null;
+        const same = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) < 0.002;
+        const dir = (s) => { const dx = s.b[0] - s.a[0], dy = s.b[1] - s.a[1], l = Math.hypot(dx, dy) || 1; return [dx / l, dy / l]; };
+        let segs = bottom.filter(s => Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]) > 0.03);
+        // merge collinear runs split by triangulation
+        let again = true;
+        while (again) {
+            again = false;
+            outer: for (let i = 0; i < segs.length; i++) for (let j = i + 1; j < segs.length; j++) {
+                const si = segs[i], sj = segs[j], di = dir(si), dj = dir(sj);
+                if (Math.abs(di[0] * dj[1] - di[1] * dj[0]) > 0.002) continue;
+                let free = null;
+                if (same(si.a, sj.b)) { si.a = si.b; free = sj.a; }
+                else if (same(si.b, sj.a)) free = sj.b;
+                else if (same(si.a, sj.a)) { si.a = si.b; free = sj.b; }
+                else if (same(si.b, sj.b)) free = sj.a;
+                else continue;
+                si.b = free; segs.splice(j, 1); again = true; break outer;
+            }
+        }
+        segs = segs.filter(s => Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]) > 0.04);
+        if (!segs.length) return null;
+        const n0 = [-Math.sin(r.yaw), Math.cos(r.yaw)];
+        // Only a face that bounds a room can carry skirting. A face on the outside surface of a wall has the room farther in:
+        // 4 cm on either side is outside the room, so it is rejected; the face on the inside surface has the room on one side.
+        const rects = M.Shell && M.Shell.regionRects ? M.Shell.regionRects(S.project.shell) : [];
+        const inRoom = (x, y) => rects.some(q => x > q[0] + 1e-4 && x < q[2] - 1e-4 && y > q[1] + 1e-4 && y < q[3] - 1e-4);
+        const eps = 0.04, plus = inRoom(r.cx + n0[0] * eps, r.cy + n0[1] * eps), minus = inRoom(r.cx - n0[0] * eps, r.cy - n0[1] * eps);
+        let n;
+        if (plus && !minus) n = n0;
+        else if (minus && !plus) n = [-n0[0], -n0[1]];
+        else if (plus && minus) {
+            // a wall with room on both sides (an interior partition): use the side the camera is on
+            const eye = M.App && M.App.renderer ? M.App.renderer.camera.eye() : null;
+            n = eye && n0[0] * (eye[0] - r.cx) + n0[1] * (eye[1] - r.cy) < 0 ? [-n0[0], -n0[1]] : n0;
+        } else return null;
+
+        // Cuts that reach the floor split a board: Door/Archway cutters, library-door cuts and shell openings.
+        const cuts = [];
+        const addCut = (cx, cy, w, yaw) => {
+            if (!(w > 0.2)) return;
+            const wx = Math.cos(yaw), wy = Math.sin(yaw);
+            cuts.push({ cx, cy, w, wx, wy });
+        };
+        ((S.project.import && S.project.import.cutters) || []).forEach(k => {
+            if ((k.type !== 'door' && k.type !== 'arch') || (k.zb || 0) > 0.5) return;
+            addCut(k.cx, k.cy, k.w, k.yaw);
+        });
+        if (M.FitModels && M.FitModels.cutters) M.FitModels.cutters(S.project).forEach(k => {
+            if ((k.type !== 'door' && k.type !== 'arch') || (k.zb || 0) > 0.5) return;
+            addCut(k.cx, k.cy, k.w, k.yaw);
+        });
+        const sh = S.project.shell || {};
+        const segsAfter = [];
+        segs.forEach(sg => {
+            const dx = sg.b[0] - sg.a[0], dy = sg.b[1] - sg.a[1], len = Math.hypot(dx, dy); if (len < 0.04) return;
+            const ux = dx / len, uy = dy / len, intervals = [];
+            const add = (t0, t1) => { const lo = Math.max(0, Math.min(t0, t1)), hi = Math.min(len, Math.max(t0, t1)); if (hi - lo > 0.01) intervals.push([lo, hi]); };
+            cuts.forEach(k => {
+                if (Math.abs(k.wx * ux + k.wy * uy) < 0.85) return;                       // not the same wall
+                const px = k.cx - sg.a[0], py = k.cy - sg.a[1];
+                if (Math.abs(-px * uy + py * ux) > 0.35) return;                          // another wall nearby
+                const t = px * ux + py * uy; add(t - k.w / 2, t + k.w / 2);
+            });
+            const addShell = (o, c, op) => {
+                if (!op || (op.type !== 'door' && op.type !== 'arch') || (op.z0 || 0) > 0.5) return;
+                let p0, p1;
+                if (o === 'H') { if (Math.abs(uy) > 0.3 || Math.abs(sg.a[1] - c) > 0.35) return; p0 = [op.u0, c]; p1 = [op.u1, c]; }
+                else { if (Math.abs(ux) > 0.3 || Math.abs(sg.a[0] - c) > 0.35) return; p0 = [c, op.u0]; p1 = [c, op.u1]; }
+                add((p0[0] - sg.a[0]) * ux + (p0[1] - sg.a[1]) * uy, (p1[0] - sg.a[0]) * ux + (p1[1] - sg.a[1]) * uy);
+            };
+            (sh.openings || []).forEach(op => addShell(op.o, op.c, op));
+            (sh.parts || []).forEach(pt => (pt.open || []).forEach(op => addShell(pt.o, pt.c, op)));
+            // stop where a perpendicular partition starts, just like wall paint
+            if (M.Skirting && M.Skirting.partitions) M.Skirting.partitions(S.project, sg.a, sg.b, [n[0], n[1]]).forEach(t => intervals.push([t - 0.0002, t + 0.0002]));
+            intervals.sort((a, b) => a[0] - b[0]);
+            let cur = 0;
+            const put = (t0, t1) => {
+                if (t1 - t0 < 0.04) return;
+                segsAfter.push({ a: [sg.a[0] + ux * t0, sg.a[1] + uy * t0, r.zb], b: [sg.a[0] + ux * t1, sg.a[1] + uy * t1, r.zb], n: [n[0], n[1]] });
+            };
+            intervals.forEach(q => {
+                const lo = Math.max(0, q[0]), hi = Math.min(len, q[1]);
+                if (hi <= cur) return;
+                if (lo > cur) put(cur, lo);
+                cur = Math.max(cur, hi);
+            });
+            if (cur < len) put(cur, len);
+        });
+        if (!segsAfter.length) return null;
+        return { rect: r, h: r.h, z: r.zb, segments: segsAfter };
+    };
     // How deep the frame of an opening sits: the model's own pieces that are left around the hole (the frame, the reveal) lie a few cm behind the
     // faces that were cut out, so glass and a door go to that depth ("in the frame") and not onto the outside surface. Metres along the outward
     // normal from the plane of the cut-out faces (negative = into the wall): the median of what is left near the opening, between 30 cm behind

@@ -422,6 +422,9 @@ window.MLO = window.MLO || {};
             }
         });
 
+        // ---------------- skirting boards placed on wall faces ----------------
+        if (M.Skirting && S.skirting && S.skirting.length) M.Skirting.triangles(S).forEach(t => emitTri('wall', 'int', t.tex, t.a, t.b, t.c));
+
         // ---------------- collision boxes the user built (Collision box tool): they only make collision, nothing is drawn ----------------
         // (a box whose centre is inside the interior belongs to its room, like the floor)
         ((project.import && project.import.cboxes) || []).forEach(k => {

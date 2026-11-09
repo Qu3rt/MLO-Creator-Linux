@@ -13,13 +13,13 @@ window.MLO = window.MLO || {};
     const encName = () => encodeURIComponent(Model.safeName(S.project.name));
     const kb = (n) => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
 
-    const TOOLS = [['building', 'Select building', 'B'], ['frame', 'Frame', 'O'], ['level', 'Raise / lower rooms', 'G'], ['room', 'Add room', '1'], ['cut', 'Cut out', '2'], ['fill', 'Fill gaps', 'J'], ['part', 'Partition', '3'], ['door', 'Door', '4'], ['window', 'Window', '5'], ['arch', 'Archway', '6'], ['fit', 'Window / door models', 'I'], ['furnish', 'Furniture', ''], ['plants', 'Props and plants', 'Y'],
+    const TOOLS = [['building', 'Select building', 'B'], ['frame', 'Frame', 'O'], ['level', 'Raise / lower rooms', 'G'], ['room', 'Add room', '1'], ['cut', 'Cut out', '2'], ['fill', 'Fill gaps', 'J'], ['part', 'Partition', '3'], ['door', 'Door', '4'], ['window', 'Window', '5'], ['arch', 'Archway', '6'], ['fit', 'Window / door models', 'I'], ['furnish', 'Furniture', ''], ['skirt', 'Skirting', 'Q'], ['plants', 'Props and plants', 'Y'],
         ['floor', 'Floor paint', '7'], ['light', 'Light', 'L'], ['figure', 'Scale figure', 'H'], ['faces', 'Delete faces', 'F'], ['edges', 'Edges (fill holes)', 'K'], ['parts', 'Model parts', 'P'], ['collision', 'Collision', 'M'], ['cbox', 'Collision box', 'N'], ['walk', 'Walk check', 'U'], ['select', 'Select', 'V'], ['eraser', 'Eraser', 'X']];
     // What each tool does in one line (the tool list shows it; the long text is in HELP).
     const SUM = {
         building: 'Pick one building out of the block.', frame: 'Square the grid to a wall and set the floor.', level: 'Raise or lower the rooms against the model.',
         room: 'Draw a rectangle: floor, walls and ceiling.', cut: 'Take a rectangle out of a room (a column, a closet).', part: 'Draw a straight interior wall.', fill: 'Close narrow gaps between your rooms.',
-        door: 'Cut a door out of the model and put the door in.', window: 'Cut a window out of the model and put glass in.', arch: 'Cut a wide opening with a box.', fit: 'Place window and door models (.glb) by hand with a move / size / turn gizmo.', plants: 'Click props, plants and small model pieces in the view and remove them.',
+        door: 'Cut a door out of the model and put the door in.', skirt: 'Click a wall face to run skirting along its base, mitered at corners.', window: 'Cut a window out of the model and put glass in.', arch: 'Cut a wide opening with a box.', fit: 'Place window and door models (.glb) by hand with a move / size / turn gizmo.', plants: 'Click props, plants and small model pieces in the view and remove them.',
         faces: 'Select faces like in Blender (click, box, A, L), then delete them: fake doors, painted windows, grilles.', parts: 'See each texture of the model and remove or restore a whole one.', collision: 'Pick pieces of the building\'s invisible collision and delete them.', cbox: 'Build your own collision: boxes with a surface type.', walk: 'Walk a player through the interior and list what blocks or leaks.', edges: 'Select the rim of a hole in the wall and fill it with faces.',
         floor: 'Paint a floor texture on part of the floor.', light: 'Hang a ceiling light.',
         select: 'Select a room or opening to move, resize or edit it.', eraser: 'Remove a cutter, light, wall or opening.', figure: 'Stand a person in the room to judge sizes.'
@@ -28,6 +28,7 @@ window.MLO = window.MLO || {};
     // or cut one out) the ways are one row with a switch, so the list is short. `vars` = [tool, label, key]; `steps` = the checklist steps (see steps()) that belong to a stage.
     const ROWS = {
         furnish: { name: 'Furniture', sum: 'Place furniture and decorations with collision.', vars: [['furnish', 'Furniture', '']] },
+        skirt: { name: 'Skirting', sum: 'Run skirting along the base of a wall face, mitered where walls meet.', vars: [['skirt', 'Skirting', 'Q']] },
         building: { name: 'Select building', vars: [['building', 'Select building', 'B']] },
         frame: { name: 'Grid and floor', sum: 'Square the grid to a wall and set the floor.', vars: [['frame', 'Grid and floor', 'O']] },
         level: { name: 'Raise / lower rooms', vars: [['level', 'Raise / lower rooms', 'G']] },
@@ -54,7 +55,7 @@ window.MLO = window.MLO || {};
         { id: 'open', name: 'Doors and windows', note: 'Cut the doors and windows out of the building\'s wall so you can walk in and see out. Nothing is cut for you: you pick the faces, or place a model with the gizmo. A model placed over an existing cut attaches to it instead of cutting the wall again.', rows: ['opening', 'models'], steps: ['open', 'portal'] },
         { id: 'repair', name: 'Clean up the model', note: 'Take out what is in the way: fake doors, painted-on windows, vents, solid collision. Then close the holes that leaves.', rows: ['faces', 'parts', 'edges', 'collision'], steps: ['col', 'colclear'] },
         { id: 'props', name: 'Props and small removals', note: 'Props, plants and small model pieces that are in the way. Click one in the view and remove it.', rows: ['plants'], steps: ['plants'] },
-        { id: 'finish', name: 'Finish the inside', note: 'Paint the floor and hang the lights. Nothing is lit unless you place a light.', rows: ['floor', 'light', 'furnish'], steps: ['lights'] },
+        { id: 'finish', name: 'Finish the inside', note: 'Paint the floor and hang the lights. Nothing is lit unless you place a light.', rows: ['floor', 'light', 'furnish', 'skirt'], steps: ['lights'] },
         { id: 'check', name: 'Check it', note: 'Walk a player-sized capsule through the interior before you export, and judge sizes with a person.', rows: ['walk', 'figure'], steps: ['walk'] },
         { id: 'export', name: 'Export', note: 'Name the resource and export it. The Export tab says how to put it on your server.', tab: 'export', rows: [], steps: ['prefix'] }
     ];
@@ -79,6 +80,7 @@ window.MLO = window.MLO || {};
         cbox: ['Drag on the floor to draw a collision box; click one to select it, drag to move, white handles to resize.', 'Pick the material in the panel: it decides the sound and what bullets do.', 'A box only makes collision, nothing is drawn for it.'],
         plants: ['Look up first (button in the panel): every prop and plant of the model is drawn.', 'Click one to select it (Shift adds, A all), X removes it, R keeps it.'],
         floor: ['Pick the floor texture in the Paint tab.', 'Drag a rectangle to give that part of the floor the texture.'],
+        skirt: ['Select the Skirting tool and click a face of a wall.', 'The board runs along the base of that face. At a corner, click the neighbouring face too: the two runs are mitered to the wall angle, 90 degrees or any other.', 'Click the same face again to remove its skirting.'],
         light: ['Click the floor to hang a ceiling light there; click a light again to remove it.', 'Only the lights you place are exported: put at least one in every room.'],
         walk: ['Press "Run the check": a player-sized capsule is walked through every room and doorway.', 'Click a line of the result to see where the problem is; "Select it" picks collision that blocks you.'],
         figure: ['Click the floor to stand a 1.8 m person there; drag to move, R turns.', 'Only a view aid: never saved or exported.'],
@@ -99,6 +101,7 @@ window.MLO = window.MLO || {};
         fit: 'Window and door models from .glb files. Add a .glb to the project (Add .glb models, or drag it onto the window): a file with several windows becomes one model per window. Choose a model in the list and click a wall to put it there, then use the gizmo: drag the coloured arrows to move it along an axis (dragging the model itself slides it along the wall), the cubes on its faces to change its size (Alt: from the middle), the white cube on the corner to scale it all together, the yellow ring to turn it (15 degree steps). Shift = fine / no snapping. R turns it 90 degrees, Shift+R turns it around, Shift+D duplicates, X removes it. Opening-enabled models automatically cut the building wall and collision within their opening volume; placed over an existing door or arch cut, a model attaches to that cut and does not cut again.',
         plants: 'Every prop and plant of the whole model is drawn as its real model. Pick what to show: plants, props, model pieces (vents, pipes). Click selects, Shift+click adds, A selects all, Alt+A none, Ctrl+I inverts, X or Delete removes, R keeps, Ctrl+Z undoes. Props and plants are hidden in the game by a script; model bushes and pieces are taken out of their file. Plants in a room or at a window are removed by default.',
         floor: 'Drag a rectangle to give that part of the floor the floor texture chosen in the Paint tab.',
+        skirt: 'Skirting boards along the base of a wall. Click a face of a wall (the imported model\'s wall, or a partition/room wall): every straight bottom run of that face gets a board. The board is cut at the wall angle where two runs meet, so 90-degree and diagonal corners close with a miter. Height, thickness and texture are in the panel; click the same face again to remove its boards. Skirting is visual geometry and is exported with the interior; it does not add collision.',
         light: 'Click the floor to hang a ceiling light there. Click a light again to remove it. Only the lights you place are exported.',
         figure: 'A person to judge heights against (1.8 m by default). Click the floor to stand the figure there, drag it to move it, R turns it by 45 degrees. It stays in view with the other tools until you remove it. It is only a view aid: it is never saved or exported.',
         faces: 'Works like Blender\'s edit mode: select, then act. Click selects the flat patch under the pointer (Ctrl+click: one triangle, Alt+click: the whole connected piece such as a grille or a vent), Shift+click adds or removes, and dragging draws a box that selects the faces you can see in it (Shift adds, Ctrl takes away). A selects all, Alt+A none, Ctrl+I inverts, L selects the piece under the pointer, Ctrl+L grows the selection to whole pieces, Shift+G selects everything with the same texture. X or Delete deletes the selection (Ctrl+Z brings it back). Use it for fake doors, painted-on windows, details that stick out and solid wall pieces. Turn on "Detail models" to reach the grilles, vents and bushes: they are separate files that go with the building and are changed in the export too. Deleting can leave a hole in a wall: the Edges tool fills it.',
@@ -425,6 +428,19 @@ window.MLO = window.MLO || {};
         if (HOW[t]) sec(root, 'how', 'How to use it', { open: true }, b => b.append(el('ul', { class: 'how' }, ...HOW[t].map(x => el('li', null, x)))));
         if (HELP[t]) sec(root, 'more', 'More about it', {}, b => b.append(el('div', { class: 'note' }, HELP[t])));
         if (t === 'floor') root.append(el('div', { class: 'row' }, el('label', null, 'Floor'), k.swatchEl(S.brush.floor, 28), el('span', { class: 'grow' }, TEX.def(S.brush.floor).name), el('button', { class: 'btn sm', onclick: () => { S.paintTarget = 'floor'; M.App.setTab('paint'); } }, 'Change')));
+        if (t === 'skirt') {
+            S.skirt = S.skirt || { h: 0.1, t: 0.016, tex: 'trim_white' };
+            const trims = TEX.list.filter(x => x.cat === 'Trim');
+            if (!S.skirt.tex || !trims.some(x => x.id === S.skirt.tex)) S.skirt.tex = S.project.defaults.trim || 'trim_white';
+            const count = (sh.skirting || []).length;
+            root.append(el('div', { class: 'h' }, 'Skirting'));
+            root.append(numField('Height', () => f2(S.skirt.h, 3), v => { S.skirt.h = Math.max(0.03, Math.min(0.4, v)); M.UI.renderLeft(); }, '0.005', 'm'),
+                numField('Thickness', () => f2(S.skirt.t, 3), v => { S.skirt.t = Math.max(0.004, Math.min(0.08, v)); M.UI.renderLeft(); }, '0.001', 'm'));
+            root.append(el('div', { class: 'row' }, el('label', null, 'Texture'), k.swatchEl(S.skirt.tex, 28),
+                el('select', { class: 'grow', onchange: (e) => { S.skirt.tex = e.target.value; M.UI.renderLeft(); } }, ...trims.map(x => el('option', { value: x.id, selected: x.id === S.skirt.tex ? true : null }, x.name)))));
+            root.append(el('div', { class: 'note' }, count + ' board' + (count === 1 ? '' : 's') + ' placed. Click a wall face (imported wall, partition or room wall) to add; click the same face again to remove. Corners are mitered to the wall angle.'));
+            root.append(el('div', { class: 'row wrap' }, el('button', { class: 'btn sm', onclick: () => { Model.edit(P => (P.shell.skirting || []).forEach(b => { b.h = S.skirt.h; b.t = S.skirt.t; b.tex = S.skirt.tex; })); } }, 'Apply to all'), el('button', { class: 'btn sm danger', onclick: () => { Model.edit(P => { P.shell.skirting = []; }); } }, 'Remove all')));
+        }
         if (!IM.loaded && !IM.loading) root.append(el('div', { class: 'note', style: { color: '#f0a4a3' } }, 'No model imported yet. Go to the Import tab.'));
         if (t === 'level') {
             const raise = (d) => { if (IM.shiftLevel(d)) toast('The rooms are ' + (d > 0 ? 'raised ' : 'lowered ') + Math.abs(d).toFixed(2) + ' m.', 'ok'); M.UI.renderLeft(); };

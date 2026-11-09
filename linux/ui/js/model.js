@@ -30,7 +30,7 @@ window.MLO = window.MLO || {};
     const defaultsFor = () => ({ wallExt: 'brick_red', wallInt: 'plaster_cream', floor: 'photo_oak_grey', ceiling: 'plaster_white', roof: 'roof_slate', trim: 'trim_white', slab: 'concrete', stair: 'wood_oak' });
     const randId = () => Math.random().toString(36).slice(2, 5);
 
-    const newShell = () => ({ ops: [], openings: [], parts: [], floors: [], lights: [], cands: [] });
+    const newShell = () => ({ ops: [], openings: [], parts: [], floors: [], lights: [], cands: [], skirting: [] });
 
     // ---- buildings: one project holds several interiors, one per building of the model ----
     // The live fields of the project (import.frame / building / iso / cutters / cboxes / clearCollision, shell, the ceiling and wall settings, defaults = the textures) belong to
@@ -150,6 +150,8 @@ window.MLO = window.MLO || {};
             p.import.cutters = p.import.cutters || []; p.import.deletes = p.import.deletes || []; p.import.fills = p.import.fills || []; p.import.mdeletes = p.import.mdeletes || []; p.import.parts = p.import.parts || []; p.import.colDeletes = p.import.colDeletes || []; p.import.cboxes = p.import.cboxes || []; p.import.fits = p.import.fits || []; p.shell = Object.assign(newShell(), p.shell || {});
             ensureBuildings(p);
         }
+        // remove old skirting on outside faces and split runs at doors added after they were placed
+        if (p.shell && M.Skirting && M.Skirting.clean) { try { M.Skirting.clean(p); } catch (e) { } }
         return p;
     }
 
@@ -162,7 +164,8 @@ window.MLO = window.MLO || {};
         stair: { wid: 1.0, steps: 0, run: 0.30, dir: 1, style: 'solid', rail: true },
         opening: 'door',
         ref: null, refMode: 'ghost', showCollision: false,
-        shellTool: 'room', shellSel: null, shellOpen: { type: 'window' }, cutSel: null
+        shellTool: 'room', shellSel: null, shellOpen: { type: 'window' }, cutSel: null,
+        skirt: { h: 0.10, t: 0.016, tex: 'trim_white' }
     };
     const hist = { undo: [], redo: [] };
 

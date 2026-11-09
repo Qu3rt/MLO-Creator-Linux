@@ -62,11 +62,80 @@ window.MLO = window.MLO || {};
         return k;
     }
 
+    // skirting for a generated wall (partition or room boundary): the face the pointer is on
+    function shellSkirt(p) {
+        const base = p.pt || p.sg; if (!base) return null;
+        // exactly the runs wall paint would cover: ShellTools.faceTargets already stops at perpendicular partitions
+        const targets = SH.faceTargets(p);
+        if (!targets || !targets.length) return null;
+        const sh = S.project.shell, PT = S.project.settings.partT, out = [];
+        targets.forEach(tg => {
+            const o = tg.o, c = tg.c, side = tg.inward || 1, u0 = tg.u0, u1 = tg.u1;
+            const host = p.pt && tg.part ? (sh.parts || []).find(q => q.id === tg.part) : null;
+            const n = o === 'H' ? [0, side] : [side, 0];
+            const plane = p.pt ? c + side * (PT / 2) : c;
+            const ops = [];
+            if (p.pt) (sh.parts || []).forEach(q => { if (q.o === o && Math.abs(q.c - c) < 0.01) (q.open || []).forEach(op => { if (op.z0 <= 0.5) ops.push([op.u0, op.u1]); }); });
+            else (p.sg.ops || []).forEach(op => { if (op.z0 <= 0.5) ops.push([op.u0, op.u1]); });
+            // fitted/library doors on a partition are cutters too
+            if (p.pt) {
+                const dx = o === 'H' ? 1 : 0, dy = o === 'H' ? 0 : 1;
+                const addCut = k => {
+                    if ((k.type !== 'door' && k.type !== 'arch') || (k.zb || 0) > 0.5) return;
+                    const wx = Math.cos(k.yaw), wy = Math.sin(k.yaw);
+                    if (Math.abs(wx * dx + wy * dy) < 0.85) return;
+                    const cn = o === 'H' ? k.cy : k.cx, cu = o === 'H' ? k.cx : k.cy;
+                    if (Math.abs(cn - c) > 0.35) return;
+                    ops.push([cu - k.w / 2, cu + k.w / 2]);
+                };
+                ((S.project.import && S.project.import.cutters) || []).forEach(addCut);
+                if (M.FitModels) M.FitModels.cutters(S.project).forEach(addCut);
+            }
+            ops.sort((q, r) => q[0] - r[0]);
+            let runs = [[u0, u1]];
+            ops.forEach(op => {
+                const next = [];
+                runs.forEach(run => {
+                    if (op[1] <= run[0] + 1e-4 || op[0] >= run[1] - 1e-4) { next.push(run); return; }
+                    if (op[0] > run[0] + 1e-4) next.push([run[0], op[0]]);
+                    if (op[1] < run[1] - 1e-4) next.push([op[1], run[1]]);
+                });
+                runs = next;
+            });
+            const H = host ? S.project.settings.ceilH * Model.wallRatio(host) : S.project.settings.ceilH;
+            runs.filter(run => run[1] - run[0] > 0.03).forEach(run => out.push({
+                a: o === 'H' ? [run[0], plane, 0] : [plane, run[0], 0],
+                b: o === 'H' ? [run[1], plane, 0] : [plane, run[1], 0],
+                n
+            }));
+        });
+        return out.length ? { h: S.project.settings.ceilH, z: 0, segments: out } : null;
+    }
+
     // ---------- pointer ----------
     function scan(e) {
         const ray = api().pointerRay(e), t = S.shellTool; lastEvt = e;
         hover = { ray, tool: t };
         if (t === 'arch') { hover.cut = pickCutter(ray); hover.surf = surfaceAt(ray); }
+        else if (t === 'skirt') {
+            const f = IM.pickOriginal(ray), sp = SH.pick(ray);
+            const preferShell = sp && (sp.kind === 'part' || sp.kind === 'seg') && (!f || sp.t < f.t - 0.02);
+            if (preferShell) {
+                const fb = shellSkirt(sp); if (fb) { hover.skirt = fb; hover.skirtKind = 'shell'; hover.shell = sp; }
+            } else if (f) {
+                const tris = IM.flatPatch(f.g, f.tri, f.file);
+                // a model wall face that is not an inside wall must not fall through to a shell wall behind it
+                if (IM.faceRect({ g: f.g, tris })) {
+                    const fb = IM.faceBase({ g: f.g, tris });
+                    if (fb) { hover.face = f; hover.patch = { g: f.g, tris }; hover.skirt = fb; hover.skirtKind = 'model'; }
+                    else hover.skirtBlocked = true;
+                }
+            }
+            if (!hover.skirt && !hover.skirtBlocked) {
+                const p = sp && (sp.kind === 'part' || sp.kind === 'seg') ? sp : null;
+                if (p) { const fb = shellSkirt(p); if (fb) { hover.skirt = fb; hover.skirtKind = 'shell'; hover.shell = p; } }
+            }
+        }
         else if (t === 'door' || t === 'window') {
             // a partition or a room wall under the pointer uses the shell opening tools; the model's faces use the cutters
             hover.surf = surfaceAt(ray);
@@ -99,6 +168,25 @@ window.MLO = window.MLO || {};
         else if (t === 'figure') { hover.fs = M.Figure.spot(ray, IM.pick); hover.fh = M.Figure.hit(ray, S.figure, api().rayBox); }
     }
 
+    // add skirting along the selected wall face; clicking the same face again removes those boards
+    function addSkirt() {
+        const sk = hover && hover.skirt; if (!sk || !sk.segments || !sk.segments.length) { toast(hover && hover.skirtBlocked ? 'That is not an inside wall face. Select the face on the room side.' : 'Click a face of a wall: a wall face with a straight base.', 'warn'); return; }
+        const sets = S.skirt || {}, h = Math.max(0.03, Math.min(sets.h || 0.1, sk.h || 2.45)), t = Math.max(0.004, sets.t || 0.016), tex = sets.tex || S.project.defaults.trim || 'trim_white';
+        const boards = sk.segments.map(sg => ({ id: randId(), a: sg.a.slice(), b: sg.b.slice(), n: sg.n.slice(), h: Math.min(h, sk.h || h), t, tex }));
+        const same = (c, b) => {
+            const d1 = Math.hypot(c.a[0] - b.a[0], c.a[1] - b.a[1], c.a[2] - b.a[2]) + Math.hypot(c.b[0] - b.b[0], c.b[1] - b.b[1], c.b[2] - b.b[2]);
+            const d2 = Math.hypot(c.a[0] - b.b[0], c.a[1] - b.b[1], c.a[2] - b.b[2]) + Math.hypot(c.b[0] - b.a[0], c.b[1] - b.a[1], c.b[2] - b.a[2]);
+            return Math.min(d1, d2) < 0.035 && c.n[0] * b.n[0] + c.n[1] * b.n[1] > 0.9;
+        };
+        const cur = S.project.shell.skirting || [], all = boards.every(b => cur.some(c => same(c, b)));
+        Model.edit(P => {
+            P.shell.skirting = P.shell.skirting || [];
+            if (all) P.shell.skirting = P.shell.skirting.filter(c => !boards.some(b => same(c, b)));
+            else boards.forEach(b => { if (!P.shell.skirting.some(c => same(c, b))) P.shell.skirting.push(b); });
+        });
+        toast(all ? 'Skirting removed.' : 'Skirting added along ' + boards.length + ' run' + (boards.length === 1 ? '' : 's') + '.', 'ok');
+    }
+
     function down(e) {
         const t = S.shellTool; scan(e);
         if (t === 'level') { levelDown(e); return; }
@@ -119,6 +207,7 @@ window.MLO = window.MLO || {};
             const k = newCutter(t, s); if (!k) { toast('Click a wall: the cutter goes through it.', 'warn'); return; }
             Model.edit(P => { P.import.cutters.push(k); }); selectCutter(k.id); return;
         }
+        if (t === 'skirt') { addSkirt(); return; }
         if (t === 'select') {
             if (hover.cut) { S.opSel = null; selectCutter(hover.cut.k.id); startDrag(hover.cut.k, e); return; }
             S.cutSel = null;
@@ -995,6 +1084,23 @@ window.MLO = window.MLO || {};
                 const pt = s.part.pt, spec = M.Shell.OPEN[t] || M.Shell.OPEN.window, u = s.part.u, h = M.Shell && S.project.settings.partT / 2 + 0.03;
                 if (pt) { if (pt.o === 'H') R.ovBox([u - spec.w / 2, pt.c - h, spec.z0], [u + spec.w / 2, pt.c + h, spec.z1], C.hov, [1, 1, 1, 0.9]); else R.ovBox([pt.c - h, u - spec.w / 2, spec.z0], [pt.c + h, u + spec.w / 2, spec.z1], C.hov, [1, 1, 1, 0.9]); }
             }
+        } else if (t === 'skirt') {
+            const sk = hover && hover.skirt;
+            if (hover && hover.face && hover.patch) drawPatch(R, hover.patch, [1, 0.88, 0.35, 0.20]);
+            if (sk) {
+                const sets = S.skirt || {}, h = Math.max(0.03, Math.min(sets.h || 0.1, sk.h || 2.45)), tt = Math.max(0.004, sets.t || 0.016);
+                let total = 0, mx = 0, my = 0;
+                sk.segments.forEach(sg => {
+                    const a = sg.a, b = sg.b, n = sg.n, z = a[2], top = z + h;
+                    total += Math.hypot(b[0] - a[0], b[1] - a[1]); mx += (a[0] + b[0]) / 2; my += (a[1] + b[1]) / 2;
+                    const A = [a[0], a[1], z + 0.01], B = [b[0], b[1], z + 0.01], A2 = [a[0] + n[0] * tt, a[1] + n[1] * tt, z + 0.01], B2 = [b[0] + n[0] * tt, b[1] + n[1] * tt, z + 0.01];
+                    const AT = [a[0], a[1], top], BT = [b[0], b[1], top], A2T = [a[0] + n[0] * tt, a[1] + n[1] * tt, top], B2T = [b[0] + n[0] * tt, b[1] + n[1] * tt, top];
+                    R.ovLine(A, B, [1, 0.78, 0.25, 0.95]); R.ovLine(AT, BT, [1, 0.78, 0.25, 0.95]); R.ovLine(A2T, B2T, [1, 0.78, 0.25, 0.55]);
+                    R.ovLine(A, A2, [1, 0.78, 0.25, 0.7]); R.ovLine(B, B2, [1, 0.78, 0.25, 0.7]); R.ovLine(A2, A2T, [1, 0.78, 0.25, 0.7]); R.ovLine(B2, B2T, [1, 0.78, 0.25, 0.7]);
+                });
+                text = 'Skirting ' + h.toFixed(3) + ' m high along ' + total.toFixed(2) + ' m: click to ' + (hover.skirtKind === 'shell' ? 'place it on this wall face' : 'place it on this face');
+                at = [mx / sk.segments.length, my / sk.segments.length, h + 0.3];
+            } else { text = hover && hover.skirtBlocked ? 'Not an inside wall: select the face on the room side' : 'Point at an inside wall face with a straight base'; at = null; }
         } else if (t === 'frame') {
             const h = hover && hover.mh;
             if (h) {
@@ -1116,7 +1222,7 @@ window.MLO = window.MLO || {};
         if (t === 'select') drawRoomSel(R); else M.App.canvas.style.cursor = t === 'cbox' ? cbCursor() : '';
     }
 
-    const KEYS = { o: 'frame', l: 'light', f: 'faces', b: 'building', g: 'level', j: 'fill', h: 'figure', k: 'edges', p: 'parts', m: 'collision', n: 'cbox', u: 'walk', i: 'fit', y: 'plants' };
+    const KEYS = { o: 'frame', l: 'light', f: 'faces', b: 'building', g: 'level', j: 'fill', h: 'figure', k: 'edges', p: 'parts', m: 'collision', n: 'cbox', u: 'walk', i: 'fit', y: 'plants', q: 'skirt' };
     function toggleCutaway() {
         IM.cutOn = !IM.cutOn; IM.applyCut(); M.UI.renderLeft(); M.UI.renderRight();
         toast(IM.cutOn ? 'Cutaway on: the model is hidden above ' + IM.cutH().toFixed(2) + ' m. C turns it off.' : 'Cutaway off.', 'ok');
