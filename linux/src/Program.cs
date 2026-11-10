@@ -344,7 +344,7 @@ namespace MloCreator
                 try
                 {
                     Vanilla.Init(gta, Path.Combine(Root, "cache"));
-                    Dictionary<string, object> p = Vanilla.PropPreview(pname, 4000);
+                    Dictionary<string, object> p = Vanilla.PropPreview(pname, 60000);
                     if (p == null) { r["ok"] = false; r["error"] = "The game has no drawable prop named \"" + pname + "\"."; }
                     else { r["ok"] = true; r["prop"] = p; }
                 }

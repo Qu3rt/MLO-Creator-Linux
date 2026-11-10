@@ -158,18 +158,22 @@ window.MLO = window.MLO || {};
             const c = Math.cos(p.yaw), s = Math.sin(p.yaw), cx = (d.bmin[0] + d.bmax[0]) / 2, cy = (d.bmin[1] + d.bmax[1]) / 2, bz = d.bmin[2];
             m.geoms.forEach((g) => {
                 if (!g.pos || !g.pos.length) return;
-                const n = g.pos.length / 3, pos = new Float32Array(n * 3), nrm = new Float32Array(n * 3), uv = new Float32Array(n * 2), idx = new Uint16Array(n);
+                const n = g.pos.length / 3, maxVerts = 60000;
                 const hasTex = !!(g.tex && m.textures[g.tex] && M.ImportModel && M.ImportModel.textures && M.ImportModel.textures['gp:' + p.model + ':' + g.tex]);
-                for (let i = 0; i < n; i++) {
-                    const lx = g.pos[i*3] - cx, ly = g.pos[i*3+1] - cy, lz = g.pos[i*3+2] - bz;
-                    pos[i*3] = p.x + lx*c - ly*s; pos[i*3+1] = p.y + lx*s + ly*c; pos[i*3+2] = z + p.z + lz;
-                    nrm[i*3] = g.nrm[i*3]*c - g.nrm[i*3+1]*s; nrm[i*3+1] = g.nrm[i*3]*s + g.nrm[i*3+1]*c; nrm[i*3+2] = g.nrm[i*3+2];
-                    if (g.uv && g.uv.length >= n*2) { uv[i*2] = g.uv[i*2]; uv[i*2+1] = g.uv[i*2+1]; }
-                    idx[i] = i;
+                for (let base = 0; base < n; base += maxVerts) {
+                    const stop = Math.min(n, base + maxVerts), count = stop - base;
+                    const pos = new Float32Array(count * 3), nrm = new Float32Array(count * 3), uv = new Float32Array(count * 2), idx = new Uint16Array(count);
+                    for (let i = base; i < stop; i++) {
+                        const j = i - base, lx = g.pos[i*3] - cx, ly = g.pos[i*3+1] - cy, lz = g.pos[i*3+2] - bz;
+                        pos[j*3] = p.x + lx*c - ly*s; pos[j*3+1] = p.y + lx*s + ly*c; pos[j*3+2] = z + p.z + lz;
+                        nrm[j*3] = g.nrm[i*3]*c - g.nrm[i*3+1]*s; nrm[j*3+1] = g.nrm[i*3]*s + g.nrm[i*3+1]*c; nrm[j*3+2] = g.nrm[i*3+2];
+                        if (g.uv && g.uv.length >= n*2) { uv[j*2] = g.uv[i*2]; uv[j*2+1] = g.uv[i*2+1]; }
+                        idx[j] = j;
+                    }
+                    built.batches.push({ level, kind: 'prop', group: 'int', tex: '', imgKey: hasTex ? 'gp:' + p.model + ':' + g.tex : null, flat: [0.63, 0.60, 0.54], alpha: 1, noCull: true, clip: true, pos, nrm, uv, idx, glass: false, model: 'gameprop' });
+                    for (let i = 0; i < count; i++) { built.bounds.mn[0] = Math.min(built.bounds.mn[0], pos[i*3]); built.bounds.mn[1] = Math.min(built.bounds.mn[1], pos[i*3+1]); built.bounds.mn[2] = Math.min(built.bounds.mn[2], pos[i*3+2]); built.bounds.mx[0] = Math.max(built.bounds.mx[0], pos[i*3]); built.bounds.mx[1] = Math.max(built.bounds.mx[1], pos[i*3+1]); built.bounds.mx[2] = Math.max(built.bounds.mx[2], pos[i*3+2]); }
+                    built.stats.tris += count / 3;
                 }
-                built.batches.push({ level, kind: 'prop', group: 'int', tex: '', imgKey: hasTex ? 'gp:' + p.model + ':' + g.tex : null, flat: [0.63, 0.60, 0.54], alpha: 1, noCull: true, clip: true, pos, nrm, uv, idx, glass: false, model: 'gameprop' });
-                for (let i = 0; i < n; i++) { built.bounds.mn[0] = Math.min(built.bounds.mn[0], pos[i*3]); built.bounds.mn[1] = Math.min(built.bounds.mn[1], pos[i*3+1]); built.bounds.mn[2] = Math.min(built.bounds.mn[2], pos[i*3+2]); built.bounds.mx[0] = Math.max(built.bounds.mx[0], pos[i*3]); built.bounds.mx[1] = Math.max(built.bounds.mx[1], pos[i*3+1]); built.bounds.mx[2] = Math.max(built.bounds.mx[2], pos[i*3+2]); }
-                built.stats.tris += n / 3;
             });
         });
         return built;

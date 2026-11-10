@@ -683,7 +683,7 @@ namespace MloCreator
             foreach (string n in names)
             {
                 string nm = CleanName(n); if (nm.Length == 0 || res.ContainsKey(nm)) continue;
-                Dictionary<string, object> d = Vanilla.PropPreview(nm, 2500); if (d == null) continue;
+                Dictionary<string, object> d = Vanilla.PropPreview(nm, 60000); if (d == null) continue;
                 res[nm] = d;
             }
             return res;
