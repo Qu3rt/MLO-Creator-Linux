@@ -19,7 +19,7 @@ window.MLO = window.MLO || {};
         floor: 'Drag a rectangle to give that part of the floor the floor texture chosen in the Paint tab.',
         select: 'Click a door, window or partition to change its size and position in the panel.',
         eraser: 'Click a partition or an opening to remove it. Added and cut rectangles are listed below.',
-        paint: 'Click a wall to give it the chosen texture.'
+        paint: 'Click a wall, a partition side or a partition end cap to give it the chosen texture.'
     };
     const DEFAULT_ROWS = [['wallInt', 'Walls'], ['floor', 'Floors'], ['ceiling', 'Ceiling'], ['trim', 'Trim & frames']];
 
@@ -246,7 +246,7 @@ window.MLO = window.MLO || {};
             const patch = anyCut ? { enabled: true, gta: P.vanilla.gta || '', frame: { ox: pl.x, oy: pl.y, oz: pl.z, heading: pl.heading }, ceilH: P.settings.ceilH, rects: Shell.regionRects(P.shell), openings: built.shell.resolved,
                 doors: X.cutDoor !== false, windows: X.cutWindows !== false, collision: X.cutCollision !== false, occluders: X.cutOccluders !== false } : undefined;
             if (patch) log('Cutting the game files for this house (the first run reads the game, about half a minute)...');
-            const model = Mesher.toExport(P, built, { light: {}, model: { resource, prefix: P.prefix, label: X.label || P.name, timecycle: 'hash_E83C53FC', placement: pl, entranceNote: 'the grabbed house door at ' + (P.vanilla.door || '').replace(/\s+/g, ' ').trim(), outDir: X.outDir || undefined, patch } });
+            const model = Mesher.toExport(P, built, { light: {}, model: { resource, prefix: P.prefix, label: X.label || P.name, timecycle: 'hash_E83C53FC', placement: pl, entranceNote: 'the grabbed house door at ' + (P.vanilla.door || '').replace(/\s+/g, ' ').trim(), outDir: X.outDir || undefined, patch, props: M.Props.exportData(P) } });
             const res = await Model.api('export', 'POST', model);
             if (!res.ok) { log('Export failed: ' + res.error, 'bad'); console.error(res.detail); }
             else {

@@ -337,6 +337,20 @@ namespace MloCreator
                 string gta = J.S(J.G(body, "gta"), null); if (string.IsNullOrWhiteSpace(gta)) gta = GtaDefault();
                 r["models"] = ImportHost.PropModels(names, gta); Json200(c, r); return;
             }
+            if (api == "prop-info" && method == "POST")
+            {
+                Dictionary<string, object> body = Json.DeserializeObject(ReadBody(c)) as Dictionary<string, object>;
+                string pname = J.S(J.G(body, "name"), ""); string gta = J.S(J.G(body, "gta"), null); if (string.IsNullOrWhiteSpace(gta)) gta = GtaDefault();
+                try
+                {
+                    Vanilla.Init(gta, Path.Combine(Root, "cache"));
+                    Dictionary<string, object> p = Vanilla.PropPreview(pname, 4000);
+                    if (p == null) { r["ok"] = false; r["error"] = "The game has no drawable prop named \"" + pname + "\"."; }
+                    else { r["ok"] = true; r["prop"] = p; }
+                }
+                catch (Exception ex) { r["ok"] = false; r["error"] = ex.Message; }
+                Json200(c, r); return;
+            }
             if (api == "game-props" && method == "POST")
             {
                 Dictionary<string, object> body = Json.DeserializeObject(ReadBody(c)) as Dictionary<string, object>;

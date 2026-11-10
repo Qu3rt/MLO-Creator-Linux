@@ -114,6 +114,7 @@ window.MLO = window.MLO || {};
     function newProject(name, kind) {
         const p = {
             version: 1, kind: kind === 'vanilla' ? 'vanilla' : (kind === 'import' ? 'import' : 'grid'), name: name || 'New House', prefix: 'mlo' + randId(),
+            propsLib: [],
             settings: { storyHeight: 3.1, wallThickness: 0.2, slab: 0.2, foundation: 0.5 },
             defaults: defaultsFor(), levels: [newLevel()], entrance: null,
             export: { resource: '', label: '', coords: '', pedZ: true, floorAbove: 0.1, autoLights: true, outDir: '' }
@@ -152,6 +153,9 @@ window.MLO = window.MLO || {};
         }
         // remove old skirting on outside faces and split runs at doors added after they were placed
         if (p.shell && M.Skirting && M.Skirting.clean) { try { M.Skirting.clean(p); } catch (e) { } }
+        // the old generated furniture is not a game asset: keep only placements whose prop is in this project's library
+        p.propsLib = p.propsLib || [];
+        if (M.Props && M.Props.migrate) { try { M.Props.migrate(p); } catch (e) { } }
         return p;
     }
 
@@ -247,6 +251,7 @@ window.MLO = window.MLO || {};
         try { localStorage.setItem('mlo.last', name); } catch (e) { }
         diskName = safeName(name); thumbAt = 0; noteOpened(name);
         bus.emit('project'); bus.emit('change');
+        if (M.Props && M.Props.fetchAll) M.Props.fetchAll();   // previews (and their game textures) after every restart/open
     }
     async function createProject(name, kind) {
         try { await saveThumb(true); } catch (e) { }                     // the project that is leaving, while its view is still on screen

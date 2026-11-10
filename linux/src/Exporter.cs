@@ -31,6 +31,8 @@ namespace MloCreator
     }
     class PortalData { public int Flags; public double[] C; }
     class DoorData { public string Name; public double X, Y, Z, Heading, ScaleXY = 1, ScaleZ = 1; }      // scale: the door model fitted to its opening
+    // A game prop placed in the MLO: only the game asset name is stored; no model files are copied.
+    class PropData { public string Name; public double X, Y, Z, Heading, Scale = 1; public int Room = 1; public V3 BMin, BMax; public bool HasBox; }
     class TexData { public string Name; public int Size; public bool Alpha; public int[] Argb; public string Usage = "DIFFUSE"; }
 
     public static class J
@@ -270,11 +272,11 @@ namespace MloCreator
         }
 
         // a prop placed inside the interior (a door): the same entity fields the game uses for this door in its own interiors
-        static string PropEntityXml(string arch, double x, double y, double z, double headingDeg, double scaleXY, double scaleZ)
+        static string PropEntityXml(string arch, double x, double y, double z, double headingDeg, double scaleXY, double scaleZ, uint flags = 1572864)
         {
             // a room entity's rotation is stored as the inverse of the real turn (CodeWalker and the game read it that way; the MLO instance itself is read directly)
             double r = -headingDeg * Math.PI / 360.0; string pad = "    ";
-            return pad + "<Item type=\"CEntityDef\">\n" + pad + " <archetypeName>" + arch + "</archetypeName>\n" + pad + " <flags value=\"1572864\" />\n" + pad + " <guid value=\"0\" />\n" + pad + " <position x=\"" + F(x) + "\" y=\"" + F(y) + "\" z=\"" + F(z) + "\" />\n" + pad + " <rotation x=\"0\" y=\"0\" z=\"" + F(Math.Sin(r)) + "\" w=\"" + F(Math.Cos(r)) + "\" />\n" + pad + " <scaleXY value=\"" + F(scaleXY) + "\" />\n" + pad + " <scaleZ value=\"" + F(scaleZ) + "\" />\n" + pad + " <parentIndex value=\"-1\" />\n" + pad + " <lodDist value=\"-1\" />\n" + pad + " <childLodDist value=\"0\" />\n" + pad + " <lodLevel>LODTYPES_DEPTH_ORPHANHD</lodLevel>\n" + pad + " <numChildren value=\"0\" />\n" + pad + " <priorityLevel>PRI_REQUIRED</priorityLevel>\n" + pad + " <extensions />\n" + pad + " <ambientOcclusionMultiplier value=\"255\" />\n" + pad + " <artificialAmbientOcclusion value=\"255\" />\n" + pad + " <tintValue value=\"0\" />\n" + pad + "</Item>\n";
+            return pad + "<Item type=\"CEntityDef\">\n" + pad + " <archetypeName>" + arch + "</archetypeName>\n" + pad + " <flags value=\"" + flags + "\" />\n" + pad + " <guid value=\"0\" />\n" + pad + " <position x=\"" + F(x) + "\" y=\"" + F(y) + "\" z=\"" + F(z) + "\" />\n" + pad + " <rotation x=\"0\" y=\"0\" z=\"" + F(Math.Sin(r)) + "\" w=\"" + F(Math.Cos(r)) + "\" />\n" + pad + " <scaleXY value=\"" + F(scaleXY) + "\" />\n" + pad + " <scaleZ value=\"" + F(scaleZ) + "\" />\n" + pad + " <parentIndex value=\"-1\" />\n" + pad + " <lodDist value=\"-1\" />\n" + pad + " <childLodDist value=\"0\" />\n" + pad + " <lodLevel>LODTYPES_DEPTH_ORPHANHD</lodLevel>\n" + pad + " <numChildren value=\"0\" />\n" + pad + " <priorityLevel>PRI_REQUIRED</priorityLevel>\n" + pad + " <extensions />\n" + pad + " <ambientOcclusionMultiplier value=\"255\" />\n" + pad + " <artificialAmbientOcclusion value=\"255\" />\n" + pad + " <tintValue value=\"0\" />\n" + pad + "</Item>\n";
         }
 
         // The two-room graph can enumerate each portal from both ends. The b3258
@@ -344,9 +346,22 @@ namespace MloCreator
             return result;
         }
 
-        static string YtypXml(string P, string mlo, string txd, List<GroupData> groups, List<PortalData> portals, V3 bmn, V3 bmx, string timecycle, List<DoorData> doors, string doorArch)
+        static string YtypXml(string P, string mlo, string txd, List<GroupData> groups, List<PortalData> portals, V3 bmn, V3 bmx, string timecycle, List<DoorData> doors, List<PropData> props, string doorArch)
         {
             StringBuilder s = new StringBuilder();
+            // a game prop may reach outside the meshes: keep the MLO archetype bounds around it
+            foreach (PropData pr in props)
+            {
+                if (!pr.HasBox) continue;
+                double c = Math.Cos(pr.Heading * Math.PI / 180.0), sn = Math.Sin(pr.Heading * Math.PI / 180.0);
+                for (int q = 0; q < 8; q++)
+                {
+                    double lx = ((q & 1) != 0 ? pr.BMax.X : pr.BMin.X) * pr.Scale, ly = ((q & 2) != 0 ? pr.BMax.Y : pr.BMin.Y) * pr.Scale, lz = ((q & 4) != 0 ? pr.BMax.Z : pr.BMin.Z) * pr.Scale;
+                    double wx = pr.X + lx * c - ly * sn, wy = pr.Y + lx * sn + ly * c, wz = pr.Z + lz;
+                    bmn.X = Math.Min(bmn.X, (float)wx); bmn.Y = Math.Min(bmn.Y, (float)wy); bmn.Z = Math.Min(bmn.Z, (float)wz);
+                    bmx.X = Math.Max(bmx.X, (float)wx); bmx.Y = Math.Max(bmx.Y, (float)wy); bmx.Z = Math.Max(bmx.Z, (float)wz);
+                }
+            }
             s.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CMapTypes>\n <extensions />\n <archetypes>");
             foreach (GroupData g in groups)
             {
@@ -363,6 +378,7 @@ namespace MloCreator
             List<GroupData> roomGroups = groups.FindAll(delegate(GroupData g) { return g.Room != 0; });
             foreach (GroupData g in roomGroups) s.Append(EntityXml(P + g.Name, g.Flags, g.Lod));
             foreach (DoorData d in doors) s.Append(PropEntityXml(d.Name, d.X, d.Y, d.Z, d.Heading, d.ScaleXY, d.ScaleZ));
+            foreach (PropData pr in props) s.Append(PropEntityXml(pr.Name, pr.X, pr.Y, pr.Z, pr.Heading, pr.Scale, pr.Scale, 1572904));
             s.AppendLine("   </entities>");
             s.AppendLine("   <rooms itemType=\"CMloRoomDef\">");
             string rb = "<bbMin x=\"" + F(bmn.X) + "\" y=\"" + F(bmn.Y) + "\" z=\"" + F(bmn.Z) + "\" />\n     <bbMax x=\"" + F(bmx.X) + "\" y=\"" + F(bmx.Y) + "\" z=\"" + F(bmx.Z) + "\" />";
@@ -371,6 +387,7 @@ namespace MloCreator
                 List<string> att = new List<string>();
                 for (int i = 0; i < roomGroups.Count; i++) if (roomGroups[i].Room == room) att.Add(i.ToString());
                 if (room == 1) for (int i = 0; i < doors.Count; i++) att.Add((roomGroups.Count + i).ToString());
+                for (int i = 0; i < props.Count; i++) if (props[i].Room == room) att.Add((roomGroups.Count + doors.Count + i).ToString());
                 string name = room == 0 ? "limbo" : mlo;
                 s.AppendLine("    <Item>\n     <name>" + name + "</name>\n     " + rb + "\n     <blend value=\"1\" />\n     <timecycleName>" + timecycle + "</timecycleName>\n     <secondaryTimecycleName />\n     <flags value=\"96\" />\n     <portalCount value=\"" + portals.Count + "\" />\n     <floorId value=\"0\" />\n     <exteriorVisibiltyDepth value=\"-1\" />\n     <attachedObjects>" + string.Join(" ", att.ToArray()) + "</attachedObjects>\n    </Item>");
             }
@@ -619,7 +636,25 @@ namespace MloCreator
                     log.Add("door models placed: " + fit.Doors.Count);
                 }
 
-                XmlDocument ytypDoc = new XmlDocument(); ytypDoc.LoadXml(YtypXml(P, mlo, txd, groups, portals, bmn, bmx, timecycle, doors, doorArch));
+                // ---- game props placed in the MLO: their asset names only, no files ----
+                List<PropData> props = new List<PropData>();
+                foreach (object po in J.A(J.G(model, "props")))
+                {
+                    Dictionary<string, object> pd = J.O(po); if (pd == null) continue;
+                    PropData pr = new PropData();
+                    pr.Name = Safe(J.S(J.G(pd, "name"), ""), "", 80); if (pr.Name.Length == 0) continue;
+                    pr.X = J.D(J.G(pd, "x"), 0); pr.Y = J.D(J.G(pd, "y"), 0); pr.Z = J.D(J.G(pd, "z"), 0);
+                    pr.Heading = J.D(J.G(pd, "heading"), 0); pr.Scale = J.D(J.G(pd, "scale"), 1); pr.Scale = Math.Max(0.01, Math.Min(20, pr.Scale));
+                    pr.Room = J.D(J.G(pd, "room"), 1) >= 0.5 ? 1 : 0;
+                    List<object> mn = J.A(J.G(pd, "bmin")), mx = J.A(J.G(pd, "bmax"));
+                    if (mn != null && mx != null && mn.Count >= 3 && mx.Count >= 3)
+                    {
+                        pr.BMin = new V3(J.D(mn[0], 0), J.D(mn[1], 0), J.D(mn[2], 0)); pr.BMax = new V3(J.D(mx[0], 0), J.D(mx[1], 0), J.D(mx[2], 0)); pr.HasBox = true;
+                    }
+                    props.Add(pr);
+                }
+                if (props.Count > 0) log.Add("game props placed: " + props.Count + " (" + string.Join(", ", props.ConvertAll<string>(delegate(PropData q) { return q.Name; }).ToArray()) + ")");
+                XmlDocument ytypDoc = new XmlDocument(); ytypDoc.LoadXml(YtypXml(P, mlo, txd, groups, portals, bmn, bmx, timecycle, doors, props, doorArch));
                 total += Save(Path.Combine(stream, P + "types.ytyp"), XmlMeta.GetRSCData(ytypDoc), files);
                 log.Add("portals: " + portals.Count);
 

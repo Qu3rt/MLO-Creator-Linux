@@ -43,7 +43,11 @@ window.MLO = window.MLO || {};
             const a = pt.c - PT / 2 - 0.04, z = pt.c + PT / 2 + 0.04, H = cfg().ceilH * Model.wallRatio(pt);
             if (pt.o === 'H') test([pt.u0, a, 0], [pt.u1, z, H], { kind: 'part', pt }); else test([a, pt.u0, 0], [z, pt.u1, H], { kind: 'part', pt });
         });
-        if (best) { const o = best.kind === 'seg' ? best.sg.o : best.pt.o; best.u = o === 'H' ? best.px : best.py; best.n = o === 'H' ? best.py : best.px; }
+        if (best) {
+            const o = best.kind === 'seg' ? best.sg.o : best.pt.o; best.u = o === 'H' ? best.px : best.py; best.n = o === 'H' ? best.py : best.px;
+            // a partition that stops in the room has an end cap at each exposed end: make it a paint target too
+            if (best.kind === 'part') { const pt = best.pt; if (best.u <= pt.u0 + 0.02) best.cap = -1; else if (best.u >= pt.u1 - 0.02) best.cap = 1; }
+        }
         return best;
     }
     function openingAt(p) {
@@ -81,6 +85,11 @@ window.MLO = window.MLO || {};
     }
 
     function faceTargets(p) {
+        // the end of a partition is a face of its own (the two cap faces are not the two long sides)
+        if (p.kind === 'part' && p.cap) {
+            const pt = p.pt, u = p.cap < 0 ? pt.u0 : pt.u1;
+            return [{ cap: true, part: pt.id, o: pt.o, c: pt.c, u, sign: p.cap }];
+        }
         const base = p.kind === 'part' ? p.pt : p.sg;
         const inward = p.kind === 'part' ? (p.n < base.c ? -1 : 1) : base.inward;
         let lo = base.u0, hi = base.u1;
@@ -103,6 +112,11 @@ window.MLO = window.MLO || {};
         Model.edit(P => {
             const sh = P.shell; sh.paint = sh.paint || [];
             faces.forEach(f => {
+                if (f.cap) {
+                    sh.paint = sh.paint.filter(q => !(q.cap && q.part === f.part && q.o === f.o && Math.abs(q.u - f.u) < 1e-4));
+                    sh.paint.push({ cap: true, part: f.part, o: f.o, c: f.c, u: f.u, sign: f.sign, tex });
+                    return;
+                }
                 sh.paint = sh.paint.filter(q => !(q.part === f.part && q.o === f.o && q.c === f.c && q.inward === f.inward && q.u0 === f.u0 && q.u1 === f.u1));
                 sh.paint.push({...f, um: (f.u0 + f.u1) / 2, tex});
             });
@@ -207,7 +221,14 @@ window.MLO = window.MLO || {};
                 } else if (t === 'eraser' && p.kind === 'part') {
                     const pt = p.pt, H = cfg().ceilH * Model.wallRatio(pt), h = PT / 2 + 0.03; if (pt.o === 'H') R.ovBox([pt.u0, pt.c - h, 0], [pt.u1, pt.c + h, H], C.erase); else R.ovBox([pt.c - h, pt.u0, 0], [pt.c + h, pt.u1, H], C.erase);
                 } else if (t === 'paint') {
-                    faceTargets(p).forEach(f => { const off = f.inward * (f.part ? PT / 2 + .015 : .015), height = p.kind === 'part' ? H * Model.wallRatio(p.pt) : H;
+                    faceTargets(p).forEach(f => { const height = p.kind === 'part' ? H * Model.wallRatio(p.pt) : H;
+                        if (f.cap) {
+                            const h = PT / 2 + .015;
+                            if (f.o === 'H') R.ovQuad([f.u, f.c - h, 0], [f.u, f.c + h, 0], [f.u, f.c + h, height], [f.u, f.c - h, height], C.ghost);
+                            else R.ovQuad([f.c - h, f.u, 0], [f.c + h, f.u, 0], [f.c + h, f.u, height], [f.c - h, f.u, height], C.ghost);
+                            return;
+                        }
+                        const off = f.inward * (f.part ? PT / 2 + .015 : .015);
                         if (f.o === 'H') R.ovQuad([f.u0, f.c + off, 0], [f.u1, f.c + off, 0], [f.u1, f.c + off, height], [f.u0, f.c + off, height], C.ghost);
                         else R.ovQuad([f.c + off, f.u0, 0], [f.c + off, f.u1, 0], [f.c + off, f.u1, height], [f.c + off, f.u0, height], C.ghost);
                     });

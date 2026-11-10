@@ -270,7 +270,7 @@ window.MLO = window.MLO || {};
             await TEX.prepare(P);
             log('Meshing: ' + built.stats.tris + ' triangles, ' + built.stats.boxes + ' collision boxes, ' + built.stats.portals + ' portals, ' + built.stats.lights + ' lights');
             if (!built.portals.length) log('Warning: no windows or doors on an outside wall, so the interior is never visible from outside. Add an entrance door.', 'bad');
-            const model = Mesher.toExport(P, built, { light: {}, model: { resource, prefix: P.prefix, label: X.label || P.name, timecycle: 'hash_E83C53FC', placement: { x: pl.x, y: pl.y, z: pl.z, heading: pl.heading }, entranceNote: pl.note, outDir: X.outDir || undefined, fitted: M.FitModels.exportSpec(P) } });
+            const model = Mesher.toExport(P, built, { light: {}, model: { resource, prefix: P.prefix, label: X.label || P.name, timecycle: 'hash_E83C53FC', placement: { x: pl.x, y: pl.y, z: pl.z, heading: pl.heading }, entranceNote: pl.note, outDir: X.outDir || undefined, fitted: M.FitModels.exportSpec(P), props: M.Props.exportData(P) } });
             const res = await Model.api('export', 'POST', model);
             if (!res.ok) { log('Export failed: ' + res.error, 'bad'); console.error(res.detail); }
             else {

@@ -270,6 +270,126 @@ namespace MloCreator
 
         // A prop's most detailed model as loose triangles (3 vertices each, flat normals) for a picture of it, at most maxTris of them (every n-th triangle when it has more). Cached.
         static Dictionary<string, float[][]> meshCache = new Dictionary<string, float[][]>();
+        // -------------------------------------------------------------------------------------------------
+        // A game prop by model name: its bounds and (for the editor preview only) a reduced triangle mesh.
+        // Nothing from the game's files is copied into the resource; the YMT only references the name.
+        // -------------------------------------------------------------------------------------------------
+        public static Dictionary<string, object> PropInfo(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return null;
+            string nm = name.Trim().ToLowerInvariant();
+            Vector3[] bb = PropBox(nm); if (bb == null) return null;
+            float[][] mesh = PropMesh(nm, 4000);
+            string file = null; long size = 0; try { string f; OpenDrawable(nm, out f, out size); file = f; } catch (Exception) { }
+            Dictionary<string, object> d = new Dictionary<string, object>();
+            d["name"] = nm;
+            d["hash"] = JenkHash.GenHash(nm);
+            d["file"] = file;
+            d["bmin"] = new float[] { bb[0].X, bb[0].Y, bb[0].Z };
+            d["bmax"] = new float[] { bb[1].X, bb[1].Y, bb[1].Z };
+            d["size"] = new float[] { bb[1].X - bb[0].X, bb[1].Y - bb[0].Y, bb[1].Z - bb[0].Z };
+            d["tris"] = mesh == null ? 0 : (int)mesh[2][0];
+            d["shown"] = mesh == null ? 0 : mesh[0].Length / 9;
+            d["pos"] = mesh == null ? "" : B64(mesh[0]);
+            d["nrm"] = mesh == null ? "" : B64(mesh[1]);
+            return d;
+        }
+        // Textured preview data for one game prop (editor only): flat triangles per material and the
+        // diffuse textures from the drawable's own texture dictionary / the surrounding RPF.
+        public static Dictionary<string, object> PropPreview(string name, int maxTris)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return null;
+            string nm = name.Trim().ToLowerInvariant();
+            Vector3[] bb = PropBox(nm); if (bb == null) return null;
+            string file; long fsize; DrawableBase dr; try { dr = OpenDrawable(nm, out file, out fsize); } catch (Exception) { return null; }
+            if (dr == null || dr.DrawableModels == null || dr.DrawableModels.High == null) return null;
+            var raw = new List<KeyValuePair<string, float[]>>(); var geoms = new List<Dictionary<string, object>>(); var wanted = new HashSet<string>();
+            int total = 0;
+
+            foreach (DrawableModel dm in dr.DrawableModels.High)
+            {
+                if (dm.Geometries == null) continue;
+                foreach (DrawableGeometry g in dm.Geometries)
+                {
+                    VertexData vd = g.VertexData; if (vd == null || g.IndexBuffer == null || g.IndexBuffer.Indices == null) continue;
+                    ushort[] idx = g.IndexBuffer.Indices; int posOff = vd.Info.GetComponentOffset(0); int stride = g.VertexStride; byte[] vb = vd.VertexBytes;
+                    int uvOff = -1; bool uvHalf = false, uvFloat = false;
+                    try { VertexComponentType ut = vd.Info.GetComponentType(6); uvOff = vd.Info.GetComponentOffset(6); uvHalf = ut == VertexComponentType.Half2; uvFloat = ut == VertexComponentType.Float2; } catch (Exception) { uvOff = -1; }
+                    if (uvOff < 0 || (!uvHalf && !uvFloat) || stride <= 0 || posOff < 0) { uvOff = -1; }
+                    string tex = DiffuseTexture(g); if (tex.Length > 0) wanted.Add(tex.ToLowerInvariant());
+                    int nv = vb.Length / stride;
+                    for (int t = 0; t + 2 < idx.Length; t += 3)
+                    {
+                        int a = idx[t], b = idx[t+1], c = idx[t+2]; if (a == b || b == c || a == c || a >= nv || b >= nv || c >= nv) continue;
+                        int[] ids = { a, b, c }; float[] po = new float[9], no = new float[9], uo = new float[6];
+                        for (int j = 0; j < 3; j++) { int o = ids[j] * stride + posOff; po[j*3] = BitConverter.ToSingle(vb,o); po[j*3+1] = BitConverter.ToSingle(vb,o+4); po[j*3+2] = BitConverter.ToSingle(vb,o+8); if (uvOff >= 0) { int uo2 = ids[j] * stride + uvOff; if (uvHalf) { uo[j*2] = Half(vb, uo2); uo[j*2+1] = Half(vb, uo2+2); } else { uo[j*2] = BitConverter.ToSingle(vb,uo2); uo[j*2+1] = BitConverter.ToSingle(vb,uo2+4); } } }
+                        float ux = po[3]-po[0], uy = po[4]-po[1], uz = po[5]-po[2], vx = po[6]-po[0], vy = po[7]-po[1], vz = po[8]-po[2];
+                        float nx = uy*vz-uz*vy, ny = uz*vx-ux*vz, nz = ux*vy-uy*vx, l = (float)Math.Sqrt(nx*nx+ny*ny+nz*nz); if (l < 1e-9f) { nx = 0; ny = 0; nz = 1; l = 1; }
+                        for (int j = 0; j < 3; j++) { no[j*3] = nx/l; no[j*3+1] = ny/l; no[j*3+2] = nz/l; }
+                        raw.Add(new KeyValuePair<string, float[]>(tex.ToLowerInvariant(), new float[] { po[0],po[1],po[2], po[3],po[4],po[5], po[6],po[7],po[8], uo[0],uo[1], uo[2],uo[3], uo[4],uo[5], nx/l,ny/l,nz/l }));
+                        total++;
+                    }
+                }
+            }
+
+            if (total == 0) return null;
+            int step = Math.Max(1, (int)Math.Ceiling(total / (double)Math.Max(1, maxTris))), shown = 0;
+            // group the sampled triangles by texture (materials of the game model)
+            var byTex = new Dictionary<string, List<float[]>>();
+            for (int i = 0; i < raw.Count; i += step) { string key = raw[i].Key ?? ""; if (!byTex.ContainsKey(key)) byTex[key] = new List<float[]>(); byTex[key].Add(raw[i].Value); shown++; }
+            foreach (var kv in byTex)
+            {
+                List<float[]> list = kv.Value; int n = list.Count * 3; float[] p = new float[n*3], nr = new float[n*3], uv = new float[n*2];
+                for (int i = 0; i < list.Count; i++) { float[] r = list[i]; for (int j = 0; j < 9; j++) p[i*9+j] = r[j]; for (int j = 0; j < 3; j++) { nr[i*9+j*3] = r[15]; nr[i*9+j*3+1] = r[16]; nr[i*9+j*3+2] = r[17]; } for (int j = 0; j < 6; j++) uv[i*6+j] = r[9+j]; }
+                var d = new Dictionary<string, object>(); d["tex"] = kv.Key; d["pos"] = B64(p); d["nrm"] = B64(nr); d["uv"] = B64(uv); d["verts"] = n; d["tris"] = list.Count; geoms.Add(d);
+            }
+            // texture dictionaries embedded in the drawable, then .ytd files in the same RPF
+            var textures = new Dictionary<string, object>();
+            if (dr.ShaderGroup != null && dr.ShaderGroup.TextureDictionary != null) AddTextures(dr.ShaderGroup.TextureDictionary, wanted, textures);
+            RpfFile owner; RpfFileEntry fe = GetEntry(nm + ".ydr", out owner);
+            if (owner != null) foreach (RpfEntry re in owner.AllEntries) { RpfFileEntry yfe = re as RpfFileEntry; if (yfe == null || !yfe.Name.EndsWith(".ytd", StringComparison.OrdinalIgnoreCase)) continue; try { YtdFile ytd = new YtdFile(); ytd.Load(owner.ExtractFile(yfe), yfe); if (ytd.TextureDict != null) AddTextures(ytd.TextureDict, wanted, textures); } catch (Exception) { } }
+            var res = new Dictionary<string, object>();
+            res["name"] = nm; res["hash"] = JenkHash.GenHash(nm); res["file"] = file;
+            res["bmin"] = new float[] { bb[0].X, bb[0].Y, bb[0].Z }; res["bmax"] = new float[] { bb[1].X, bb[1].Y, bb[1].Z };
+            res["size"] = new float[] { bb[1].X - bb[0].X, bb[1].Y - bb[0].Y, bb[1].Z - bb[0].Z };
+            res["tris"] = total; res["shown"] = shown; res["geoms"] = geoms; res["textures"] = textures;
+            return res;
+        }
+        static string DiffuseTexture(DrawableGeometry g)
+        {
+            string first = ""; uint diff = JenkHash.GenHash("diffusesampler");
+            try { ShaderParametersBlock pl = g.Shader.ParametersList; for (int k = 0; k < pl.Parameters.Length; k++) { TextureBase tb = pl.Parameters[k].Data as TextureBase; if (tb == null) continue; if (first.Length == 0) first = tb.Name; if ((uint)pl.Hashes[k] == diff) return tb.Name; } } catch (Exception) { }
+            return first;
+        }
+        static void AddTextures(TextureDictionary dict, HashSet<string> wanted, Dictionary<string, object> outTex)
+        {
+            if (dict == null || dict.Textures == null) return;
+            foreach (Texture t in dict.Textures.data_items)
+            {
+                string name = (t.Name ?? "").ToLowerInvariant(); if (name.Length == 0 || !wanted.Contains(name) || outTex.ContainsKey(name)) continue;
+                Dictionary<string, object> d = TexImage(name, t); if (d != null) outTex[name] = d;
+            }
+        }
+        static Dictionary<string, object> TexImage(string name, Texture t)
+        {
+            try
+            {
+                int w = t.Width, h = t.Height, mip = 0; int levels = Math.Max(1, (int)t.Levels);
+                while ((w >> mip) > 256 && mip < levels - 1) mip++;
+                int mw = Math.Max(1, w >> mip), mh = Math.Max(1, h >> mip);
+                byte[] px = CodeWalker.Utils.DDSIO.GetPixels(t, mip); if (px == null || px.Length < mw * mh * 4) return null;
+                byte[] rgba = new byte[mw * mh * 4];
+                for (int i = 0; i < mw * mh; i++) { rgba[i*4] = px[i*4+2]; rgba[i*4+1] = px[i*4+1]; rgba[i*4+2] = px[i*4]; rgba[i*4+3] = px[i*4+3]; }
+                Dictionary<string, object> d = new Dictionary<string, object>(); d["w"] = mw; d["h"] = mh; d["rgba"] = Convert.ToBase64String(rgba); return d;
+            }
+            catch (Exception) { return null; }
+        }
+        static string B64(float[] a)
+        {
+            if (a == null || a.Length == 0) return "";
+            byte[] b = new byte[a.Length * 4]; Buffer.BlockCopy(a, 0, b, 0, b.Length); return Convert.ToBase64String(b);
+        }
+
         public static float[][] PropMesh(string name, int maxTris)
         {
             string k = name.ToLowerInvariant(); float[][] res; if (meshCache.TryGetValue(k, out res)) return res;

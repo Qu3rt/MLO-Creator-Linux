@@ -27,7 +27,7 @@ window.MLO = window.MLO || {};
     // ---- The route: the stages in the order you do them. A row of the list is one job; where a job has a few ways to do it (a door, a window or an archway; add a room
     // or cut one out) the ways are one row with a switch, so the list is short. `vars` = [tool, label, key]; `steps` = the checklist steps (see steps()) that belong to a stage.
     const ROWS = {
-        furnish: { name: 'Furniture', sum: 'Place furniture and decorations with collision.', vars: [['furnish', 'Furniture', '']] },
+        furnish: { name: 'Furniture', sum: 'Look up a game prop name and place its in-game asset; only the name is exported.', vars: [['furnish', 'Furniture', '']] },
         skirt: { name: 'Skirting', sum: 'Run skirting along the base of a wall face, mitered where walls meet.', vars: [['skirt', 'Skirting', 'Q']] },
         building: { name: 'Select building', vars: [['building', 'Select building', 'B']] },
         frame: { name: 'Grid and floor', sum: 'Square the grid to a wall and set the floor.', vars: [['frame', 'Grid and floor', 'O']] },
@@ -112,7 +112,7 @@ window.MLO = window.MLO || {};
         edges: 'Like fixing a hole in Blender. The rims of the holes that deleting faces left in the model\'s walls are drawn in orange. Click an edge to select it, Shift+click adds or removes one, Alt+click (or double-click) takes the whole loop around the hole, A selects every edge shown. F fills the selected hole with faces that take their material from the wall around them. An open chain of edges closes with a straight line. Fills are saved with the project and exported with the model.',
         select: 'Click a room (or a cut-out) to select it: drag an edge or corner to resize it, drag the inside to move it. Edges snap to the model\'s walls, to other rooms and to 5 cm; hold Shift for no snapping. Del or X removes it, Esc deselects. Click a cutter to edit its size and position in the panel, or drag it along the wall. Click a partition or opening to edit it.',
         eraser: 'Click a cutter, a light, a partition or an opening to remove it.',
-        paint: 'Click a wall to give it the chosen texture.'
+        paint: 'Click a wall, a partition side or a partition end cap to give it the chosen texture.'
     };
     UI2.TOOLS = TOOLS;
     UI2.addFiles = (mode) => addFiles(mode);
@@ -983,7 +983,7 @@ window.MLO = window.MLO || {};
                 // doors placed with the door model (positions are in the grid's coordinates, which is the interior's own frame)
                 const doors = dmod ? M.Storeys.allDoors(BP) : [];        // two leaves for double doors
                 if (doors.length) log(tag + 'Doors placed with ' + dmod.name + ': ' + doors.length);
-                const m = Mesher.toExport(BP, built, { light: {}, model: { resource, prefix: prefixOf(BP, rec), label: many ? b.name : (X.label || BP.name), timecycle: 'hash_E83C53FC', placement: { x: pl.x, y: pl.y, heading: pl.heading, z: pl.z }, entranceNote: 'test spot inside the interior: ' + tp, outDir: X.outDir || undefined,
+                const m = Mesher.toExport(BP, built, { light: {}, model: { resource, prefix: prefixOf(BP, rec), label: many ? b.name : (X.label || BP.name), timecycle: 'hash_E83C53FC', placement: { x: pl.x, y: pl.y, heading: pl.heading, z: pl.z }, entranceNote: 'test spot inside the interior: ' + tp, outDir: X.outDir || undefined, props: M.Props.exportData(BP),
                     doors, doorModel: doors.length ? { name: dmod.name, include: !!dmod.include, project: BP.name } : undefined, fitted: M.Storeys.allFitted(BP) } });
                 models.push(m); tps.push({ name: b.name, tp }); occSets.push({ rects: M.Storeys.all(BP).flatMap(f => Shell.regionRects(f.d.shell)), place: { x: pl.x, y: pl.y, heading: pl.heading } });
             }));
